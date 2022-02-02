@@ -12,4 +12,16 @@ pub fn build(b: *std.build.Builder) void {
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
+
+    const benchmark = b.addExecutable("benchmark", "src/benchmark.zig");
+    const target = b.standardTargetOptions(.{});
+    benchmark.setTarget(target);
+    benchmark.setBuildMode(std.builtin.Mode.ReleaseFast);
+    benchmark.install();
+
+    const run_benchmark_cmd = benchmark.run();
+    run_benchmark_cmd.step.dependOn(b.getInstallStep());
+
+    const benchmark_step = b.step("benchmark", "Build library benchmarks");
+    benchmark_step.dependOn(&run_benchmark_cmd.step);
 }
