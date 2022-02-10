@@ -141,7 +141,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
 
         /// Final states are optional. Note that it's possible, and common, for transitions
         /// to exit final states during execution. It's up to the library user to check for
-        /// any final state condition, using `isInFinalState()` or comparing with `currentState()`
+        /// any final state conditions, using `isInFinalState()` or comparing with `currentState()`
         /// Returns `StateError.Invalid` if the final state is already added.
         pub fn addFinalState(self: *Self, final_state: StateType) !void {
             if (self.isFinalState(final_state)) return StateError.Invalid;
@@ -153,9 +153,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             return self.internal.final_states.isSet(@enumToInt(self.currentState()));
         }
 
-        /// Returns true if the argument is a final state. Note that FSMs allow transitions from
-        /// final states as long as they eventuelly ends up in a final state. Hence, any final
-        /// state logic must be implemented by the library user.
+        /// Returns true if the argument is a final state
         pub fn isFinalState(self: *Self, state: StateType) bool {
             return self.internal.final_states.isSet(@enumToInt(state));
         }
@@ -332,7 +330,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
         }
 
         /// Reads a state machine from a buffer containing Graphviz or libfsm text.
-        /// Any currently existing states and triggers are preserved.
+        /// Any currently existing transitions are preserved.
         /// Parsing is supported at both comptime and runtime.
         ///
         /// Lines of the following forms are considered during parsing:
@@ -352,7 +350,8 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
         ///    end: -> "X" Y 'ZZZ';
         ///    end: -> event1, e2, 'ZZZ';
         ///
-        /// The purpose of this parser is to support a simple text format for defining state machines, not to be a full .gv parser.
+        /// The purpose of this parser is to support a simple text format for defining state machines,
+        /// not to be a full .gv parser.
         pub fn importText(self: *Self, input: []const u8) !void {
 
             // Might as well use a state machine to implement importing textual state machines.
@@ -1028,7 +1027,7 @@ test "finite state automaton for accepting a 25p car park charge (from Computers
     // Car park charge reached
     try expect(sm.isInFinalState());
 
-    // Unable to expect more coins
+    // Verify that we're unable to accept more coins
     try expectError(StateError.Invalid, sm.activateTrigger(.p10));
 
     // Restart the state machine and try a different combination to reach 25p
@@ -1037,7 +1036,7 @@ test "finite state automaton for accepting a 25p car park charge (from Computers
     try sm.activateTrigger(.p5);
     try expect(sm.isInFinalState());
 
-    // Same as restart, but makes sure we're currently in the start state or a final state
+    // Same as restart(), but makes sure we're currently in the start state or a final state
     try sm.safeRestart();
     try sm.activateTrigger(.p10);
     try expectError(StateError.Invalid, sm.safeRestart());
