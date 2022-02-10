@@ -121,6 +121,19 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             self.internal.current_state = start_state;
         }
 
+        /// Unconditionally restart the state machine.
+        /// This sets the current state back to the initial start state.
+        pub fn restart(self: *Self) void {
+            self.internal.current_state = self.internal.start_state;
+        }
+
+        /// Same as `restart` but fails if the state machine is currently neither in a final state,
+        /// nor in the initial start state.
+        pub fn safeRestart(self: *Self) StateError!void {
+            if (!self.isInFinalState() and !self.isInStartState()) return StateError.Invalid;
+            self.internal.current_state = self.internal.start_state;
+        }
+
         /// Returns true if the current state is the start state
         pub fn isInStartState(self: *Self) bool {
             return self.internal.current_state == self.internal.start_state;
@@ -329,7 +342,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
         ///    a -> b [label="someevent"]
         ///    a -> b [label="event1 || event2"]
         ///    a -> b "event1"
-        ///    "a" -> "b" "event1"
+        ///    "a" -> "b" "event1";
         ///    a -> b 'event1'
         ///    'a' -> 'b' 'event1'
         ///    'a' -> 'b' 'event1 || event2'
@@ -507,6 +520,7 @@ pub fn GenerateConsecutiveEnum(prefix: []const u8, element_count: usize) type {
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
+const expectError = std.testing.expectError;
 
 test "generate state enums" {
     const State = GenerateConsecutiveEnum("S", 100);
@@ -800,7 +814,7 @@ test "handler that cancels" {
     try sm.activateTrigger(.click);
 
     // Third time will fail
-    try std.testing.expectError(StateError.Canceled, sm.activateTrigger(.click));
+    try expectError(StateError.Canceled, sm.activateTrigger(.click));
 }
 
 // Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
@@ -984,6 +998,55 @@ test "export: graphviz export of finite automaton sample" {
     try expectEqualSlices(u8, target[0..], outbuf.items[0..]);
 }
 
+test "finite state automaton for accepting a 25p car park charge (from Computers Without Memory - Computerphile)" {
+    const state_machine =
+        \\ sum0  ->  sum5   p5
+        \\ sum0  ->  sum10  p10
+        \\ sum0  ->  sum20  p20
+        \\ sum5  ->  sum10  p5
+        \\ sum5  ->  sum15  p10
+        \\ sum5  ->  sum25  p20
+        \\ sum10 ->  sum15  p5
+        \\ sum10 ->  sum20  p10
+        \\ sum15 ->  sum20  p5
+        \\ sum15 ->  sum25  p10
+        \\ sum20 ->  sum25  p5
+        \\ start: sum0
+        \\ end: sum25
+    ;
+
+    const Sum = enum { sum0, sum5, sum10, sum15, sum20, sum25 };
+    const Coin = enum { p5, p10, p20 };
+    var sm = StateMachine(Sum, Coin, .sum0).init();
+    try sm.importText(state_machine);
+
+    // Add 5p, 10p and 10p coins
+    try sm.activateTrigger(.p5);
+    try sm.activateTrigger(.p10);
+    try sm.activateTrigger(.p10);
+
+    // Car park charge reached
+    try expect(sm.isInFinalState());
+
+    // Unable to expect more coins
+    try expectError(StateError.Invalid, sm.activateTrigger(.p10));
+
+    // Restart the state machine and try a different combination to reach 25p
+    sm.restart();
+    try sm.activateTrigger(.p20);
+    try sm.activateTrigger(.p5);
+    try expect(sm.isInFinalState());
+
+    // Same as restart, but makes sure we're currently in the start state or a final state
+    try sm.safeRestart();
+    try sm.activateTrigger(.p10);
+    try expectError(StateError.Invalid, sm.safeRestart());
+    try sm.activateTrigger(.p5);
+    try sm.activateTrigger(.p5);
+    try sm.activateTrigger(.p5);
+    try expect(sm.isInFinalState());
+}
+
 /// An elevator state machine
 const ElevatorTest = struct {
     const Elevator = enum { doors_opened, doors_closed, moving, exit_light_blinking };
@@ -1003,7 +1066,7 @@ const ElevatorTest = struct {
 
 test "elevator: redefine transition should fail" {
     var sm = try ElevatorTest.init();
-    try std.testing.expectError(StateError.AlreadyDefined, sm.addTransition(.doors_opened, .doors_closed));
+    try expectError(StateError.AlreadyDefined, sm.addTransition(.doors_opened, .doors_closed));
 }
 
 test "elevator: apply" {

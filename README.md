@@ -79,7 +79,7 @@ const FSM = fsm.StateMachine(State, Trigger, .off);
 If you don't need triggers, simply pass null:
 
 ```zig
-const FSM = fsm.StateMachine(State, null);
+const FSM = fsm.StateMachine(State, null, .off);
 ```
 
 ### Making an instance
@@ -92,13 +92,13 @@ var sm = FSM.init();
 If you don't need to reference the state machine type, you can define the type and get an instance in one statement:
 
 ```zig
-var sm = fsm.StateMachine(State, Trigger).init();
+var sm = fsm.StateMachine(State, Trigger, .off).init();
 ```
 
 You can also pass anonymous state/trigger enums:
 
 ```zig
-var sm = fsm.StateMachine(enum { on, off }, enum { click }).init();
+var sm = fsm.StateMachine(enum { on, off }, enum { click }, .off).init();
 ```
 
 ### Adding state transitions
