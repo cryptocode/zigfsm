@@ -86,26 +86,26 @@ const FSM = fsm.StateMachine(State, null, .off);
 Now that we have a state machine *type*, let's create an instance with an initial state :
 
 ```zig
-var sm = FSM.init();
+var fsm = FSM.init();
 ```
 
 If you don't need to reference the state machine type, you can define the type and get an instance in one statement:
 
 ```zig
-var sm = fsm.StateMachine(State, Trigger, .off).init();
+var fsm = fsm.StateMachine(State, Trigger, .off).init();
 ```
 
 You can also pass anonymous state/trigger enums:
 
 ```zig
-var sm = fsm.StateMachine(enum { on, off }, enum { click }, .off).init();
+var fsm = fsm.StateMachine(enum { on, off }, enum { click }, .off).init();
 ```
 
 ### Adding state transitions
 
 ```zig
-try sm.addTransition(.on, .off);
-try sm.addTransition(.off, .on);
+try fsm.addTransition(.on, .off);
+try fsm.addTransition(.off, .on);
 ```
 
 ### Optionally defining triggers
@@ -118,8 +118,8 @@ The same trigger can cause different transitions to happen, depending on the cur
 Let's define what `.click` means for the on and off states:
 
 ```zig
-try sm.addTrigger(.click, .on, .off);
-try sm.addTrigger(.click, .off, .on);
+try fsm.addTrigger(.click, .on, .off);
+try fsm.addTrigger(.click, .off, .on);
 ```
 
 This expresses that if `.click` happens in the `.on` state, then transition to the `.off` state, and vice versa.
@@ -128,8 +128,8 @@ This expresses that if `.click` happens in the `.on` state, then transition to t
 A helper function is available to define triggers and state transitions at the same time:
 
 ```zig
-try sm.addTriggerAndTransition(.click, .on, .off);
-try sm.addTriggerAndTransition(.click, .off, .on);
+try fsm.addTriggerAndTransition(.click, .on, .off);
+try fsm.addTriggerAndTransition(.click, .off, .on);
 ```
 
 Which approach to use depends on the application.
@@ -145,7 +145,7 @@ const definition = [_]Transition(State, Trigger){
     .{ .trigger = .click, .from = .on, .to = .off },
     .{ .trigger = .click, .from = .off, .to = .on },
 };
-var sm = StateMachineFromTable(State, Trigger, &definition, .off, &.{}).init();
+var fsm = StateMachineFromTable(State, Trigger, &definition, .off, &.{}).init();
 ```
 
 Note that the `.trigger` field is optional, in which case only transition validation is added.
@@ -155,7 +155,7 @@ Note that the `.trigger` field is optional, in which case only transition valida
 Let's flip the lights on by directly transitioning to the on state:
 
 ```zig
-try sm.transitionTo(.on);
+try fsm.transitionTo(.on);
 ```
 
 This will fail with `StateError.Invalid` if the transition is not valid.
@@ -163,9 +163,9 @@ This will fail with `StateError.Invalid` if the transition is not valid.
 Next, let's change state using the click trigger. In fact, let's do it several times, flipping the switch off and on and off again:
 
 ```zig
-try sm.activateTrigger(.click);
-try sm.activateTrigger(.click);
-try sm.activateTrigger(.click);
+try fsm.activateTrigger(.click);
+try fsm.activateTrigger(.click);
+try fsm.activateTrigger(.click);
 ```
 
 Again, this will fail with `StateError.Invalid` if a transition is not valid.
@@ -173,8 +173,8 @@ Again, this will fail with `StateError.Invalid` if a transition is not valid.
 Finally, it's possible to change state through the more generic `apply` function, which takes either a new state or a trigger.
 
 ```zig
-try sm.apply(.{ .state = .on });
-try sm.apply(.{ .trigger = .click });
+try fsm.apply(.{ .state = .on });
+try fsm.apply(.{ .trigger = .click });
 ```
 
 ### Probing the current state
@@ -197,7 +197,7 @@ Let's keep track of the number of times a light switch transition happens:
 
 ```zig
 var countingHandler = CountingHandler.init();
-try sm.addTransitionHandler(&countingHandler.handler);
+try fsm.addTransitionHandler(&countingHandler.handler);
 ```
 
 Whenever a transition happens, the handler's `onTransition` function will be called.
@@ -237,3 +237,13 @@ Note that `onTransition` must be public.
 The transition handler can conditionally stop a transition from happening by returning `HandlerResult.Cancel`. The callsite of transitionTo or activateTrigger will then fail with `StateError.Invalid`
 
 Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)
+
+### Valid states iterator
+
+It's occasionally useful to know which states are possible to reach from the current state. This is done using an iterator:
+
+```zig
+while (fsm.validNextStatesIterator()) |valid_next_state| {
+    ...
+}
+```

@@ -556,50 +556,50 @@ const expectError = std.testing.expectError;
 
 test "generate state enums" {
     const State = GenerateConsecutiveEnum("S", 100);
-    var sm = StateMachine(State, null, .S0).init();
-    try sm.addTransition(.S0, .S1);
-    try sm.transitionTo(.S1);
-    try expectEqual(sm.currentState(), .S1);
+    var fsm = StateMachine(State, null, .S0).init();
+    try fsm.addTransition(.S0, .S1);
+    try fsm.transitionTo(.S1);
+    try expectEqual(fsm.currentState(), .S1);
 }
 
 test "minimal without trigger" {
     const State = enum { on, off };
-    var sm = StateMachine(State, null, .off).init();
-    try sm.addTransition(.on, .off);
-    try sm.addTransition(.off, .on);
+    var fsm = StateMachine(State, null, .off).init();
+    try fsm.addTransition(.on, .off);
+    try fsm.addTransition(.off, .on);
 
-    try sm.transitionTo(.on);
-    try expectEqual(sm.currentState(), .on);
+    try fsm.transitionTo(.on);
+    try expectEqual(fsm.currentState(), .on);
 }
 
 test "comptime minimal without trigger" {
     comptime {
         const State = enum { on, off };
-        var sm = StateMachine(State, null, .off).init();
-        try sm.addTransition(.on, .off);
-        try sm.addTransition(.off, .on);
+        var fsm = StateMachine(State, null, .off).init();
+        try fsm.addTransition(.on, .off);
+        try fsm.addTransition(.off, .on);
 
-        try sm.transitionTo(.on);
-        try expectEqual(sm.currentState(), .on);
+        try fsm.transitionTo(.on);
+        try expectEqual(fsm.currentState(), .on);
     }
 }
 
 test "minimal with trigger" {
     const State = enum { on, off };
     const Trigger = enum { click };
-    var sm = StateMachine(State, Trigger, .off).init();
-    try sm.addTransition(.on, .off);
-    try sm.addTransition(.off, .on);
-    try sm.addTrigger(.click, .on, .off);
-    try sm.addTrigger(.click, .off, .on);
+    var fsm = StateMachine(State, Trigger, .off).init();
+    try fsm.addTransition(.on, .off);
+    try fsm.addTransition(.off, .on);
+    try fsm.addTrigger(.click, .on, .off);
+    try fsm.addTrigger(.click, .off, .on);
 
     // Transition manually
-    try sm.transitionTo(.on);
-    try expectEqual(sm.currentState(), .on);
+    try fsm.transitionTo(.on);
+    try expectEqual(fsm.currentState(), .on);
 
     // Transition through a trigger (event)
-    try sm.activateTrigger(.click);
-    try expectEqual(sm.currentState(), .off);
+    try fsm.activateTrigger(.click);
+    try expectEqual(fsm.currentState(), .off);
 }
 
 test "minimal with trigger defined using a table" {
@@ -609,34 +609,34 @@ test "minimal with trigger defined using a table" {
         .{ .trigger = .click, .from = .on, .to = .off },
         .{ .trigger = .click, .from = .off, .to = .on },
     };
-    var sm = StateMachineFromTable(State, Trigger, &definition, .off, &.{}).init();
+    var fsm = StateMachineFromTable(State, Trigger, &definition, .off, &.{}).init();
 
     // Transition manually
-    try sm.transitionTo(.on);
-    try expectEqual(sm.currentState(), .on);
+    try fsm.transitionTo(.on);
+    try expectEqual(fsm.currentState(), .on);
 
     // Transition through a trigger (event)
-    try sm.activateTrigger(.click);
-    try expectEqual(sm.currentState(), .off);
+    try fsm.activateTrigger(.click);
+    try expectEqual(fsm.currentState(), .off);
 }
 
 test "check state" {
     const State = enum { start, stop };
     const FSM = StateMachine(State, null, .start);
 
-    var sm = FSM.init();
-    try sm.addTransition(.start, .stop);
-    try sm.addFinalState(.stop);
+    var fsm = FSM.init();
+    try fsm.addTransition(.start, .stop);
+    try fsm.addFinalState(.stop);
 
-    try expect(sm.isFinalState(.stop));
-    try expect(sm.isInStartState());
-    try expect(sm.isCurrently(.start));
-    try expect(!sm.isInFinalState());
+    try expect(fsm.isFinalState(.stop));
+    try expect(fsm.isInStartState());
+    try expect(fsm.isCurrently(.start));
+    try expect(!fsm.isInFinalState());
 
-    try sm.transitionTo(.stop);
-    try expect(sm.isCurrently(.stop));
-    try expectEqual(sm.currentState(), .stop);
-    try expect(sm.isInFinalState());
+    try fsm.transitionTo(.stop);
+    try expect(fsm.isCurrently(.stop));
+    try expectEqual(fsm.currentState(), .stop);
+    try expect(fsm.isInFinalState());
 }
 
 // Simple CSV parser based on the state model in https://ppolv.wordpress.com/2008/02/25/parsing-csv-in-erlang
@@ -748,71 +748,71 @@ test "csv parser" {
         }
     };
 
-    var sm = FSM.init();
-    try sm.addTriggerAndTransition(.whitespace, .field_start, .field_start);
-    try sm.addTriggerAndTransition(.whitespace, .unquoted, .unquoted);
-    try sm.addTriggerAndTransition(.whitespace, .post_quoted, .post_quoted);
-    try sm.addTriggerAndTransition(.char, .field_start, .unquoted);
-    try sm.addTriggerAndTransition(.char, .unquoted, .unquoted);
-    try sm.addTriggerAndTransition(.quote, .field_start, .quoted);
-    try sm.addTriggerAndTransition(.quote, .quoted, .post_quoted);
-    try sm.addTriggerAndTransition(.anything_not_quote, .quoted, .quoted);
-    try sm.addTriggerAndTransition(.comma, .post_quoted, .field_start);
-    try sm.addTriggerAndTransition(.comma, .unquoted, .field_start);
-    try sm.addTriggerAndTransition(.comma, .field_start, .field_start);
-    try sm.addTriggerAndTransition(.newline, .post_quoted, .field_start);
-    try sm.addTriggerAndTransition(.newline, .unquoted, .field_start);
-    try sm.addTriggerAndTransition(.eof, .unquoted, .done);
-    try sm.addTriggerAndTransition(.eof, .quoted, .done);
-    try sm.addFinalState(.done);
+    var fsm = FSM.init();
+    try fsm.addTriggerAndTransition(.whitespace, .field_start, .field_start);
+    try fsm.addTriggerAndTransition(.whitespace, .unquoted, .unquoted);
+    try fsm.addTriggerAndTransition(.whitespace, .post_quoted, .post_quoted);
+    try fsm.addTriggerAndTransition(.char, .field_start, .unquoted);
+    try fsm.addTriggerAndTransition(.char, .unquoted, .unquoted);
+    try fsm.addTriggerAndTransition(.quote, .field_start, .quoted);
+    try fsm.addTriggerAndTransition(.quote, .quoted, .post_quoted);
+    try fsm.addTriggerAndTransition(.anything_not_quote, .quoted, .quoted);
+    try fsm.addTriggerAndTransition(.comma, .post_quoted, .field_start);
+    try fsm.addTriggerAndTransition(.comma, .unquoted, .field_start);
+    try fsm.addTriggerAndTransition(.comma, .field_start, .field_start);
+    try fsm.addTriggerAndTransition(.newline, .post_quoted, .field_start);
+    try fsm.addTriggerAndTransition(.newline, .unquoted, .field_start);
+    try fsm.addTriggerAndTransition(.eof, .unquoted, .done);
+    try fsm.addTriggerAndTransition(.eof, .quoted, .done);
+    try fsm.addFinalState(.done);
 
-    try Parser.parse(&sm, csv_input);
-    try expect(sm.isInFinalState());
+    try Parser.parse(&fsm, csv_input);
+    try expect(fsm.isInFinalState());
 
     // Uncomment to generate a Graphviz diagram
-    // try sm.exportGraphviz("csv", std.io.getStdOut().writer(), .{.shape = "box", .shape_final_state = "doublecircle", .show_initial_state=true});
+    // try fsm.exportGraphviz("csv", std.io.getStdOut().writer(), .{.shape = "box", .shape_final_state = "doublecircle", .show_initial_state=true});
 }
 
 // Demonstrates that triggering a single "click" event can perpetually cycle through intensity states.
 test "moore machine: three-level intensity light" {
     // Here we use anonymous state/trigger enums, Zig will still allow us to reference these
-    var sm = StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
+    var fsm = StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
 
-    try sm.addTriggerAndTransition(.click, .off, .dim);
-    try sm.addTriggerAndTransition(.click, .dim, .medium);
-    try sm.addTriggerAndTransition(.click, .medium, .bright);
-    try sm.addTriggerAndTransition(.click, .bright, .off);
+    try fsm.addTriggerAndTransition(.click, .off, .dim);
+    try fsm.addTriggerAndTransition(.click, .dim, .medium);
+    try fsm.addTriggerAndTransition(.click, .medium, .bright);
+    try fsm.addTriggerAndTransition(.click, .bright, .off);
 
     // Trigger a full cycle of off -> dim -> medium -> bright -> off
 
-    try expect(sm.isCurrently(.off));
+    try expect(fsm.isCurrently(.off));
 
-    try sm.activateTrigger(.click);
-    try expect(sm.isCurrently(.dim));
+    try fsm.activateTrigger(.click);
+    try expect(fsm.isCurrently(.dim));
 
-    try sm.activateTrigger(.click);
-    try expect(sm.isCurrently(.medium));
+    try fsm.activateTrigger(.click);
+    try expect(fsm.isCurrently(.medium));
 
-    try sm.activateTrigger(.click);
-    try expect(sm.isCurrently(.bright));
+    try fsm.activateTrigger(.click);
+    try expect(fsm.isCurrently(.bright));
 
-    try sm.activateTrigger(.click);
-    try expect(sm.isCurrently(.off));
+    try fsm.activateTrigger(.click);
+    try expect(fsm.isCurrently(.off));
 
-    try expect(sm.canTransitionTo(.dim));
-    try expect(!sm.canTransitionTo(.medium));
-    try expect(!sm.canTransitionTo(.bright));
-    try expect(!sm.canTransitionTo(.off));
+    try expect(fsm.canTransitionTo(.dim));
+    try expect(!fsm.canTransitionTo(.medium));
+    try expect(!fsm.canTransitionTo(.bright));
+    try expect(!fsm.canTransitionTo(.off));
 
     // Uncomment to generate a Graphviz diagram
-    // try sm.exportGraphviz("lights", std.io.getStdOut().writer(), .{.layout = "circo", .shape = "box"});
+    // try fsm.exportGraphviz("lights", std.io.getStdOut().writer(), .{.layout = "circo", .shape = "box"});
 }
 
 test "handler that cancels" {
     const State = enum { on, off };
     const Trigger = enum { click };
     const FSM = StateMachine(State, Trigger, .off);
-    var sm = FSM.init();
+    var fsm = FSM.init();
 
     // Demonstrates how to manage extra state (in this case a simple counter) while reacting
     // to transitions. Once the counter reaches 3, it cancels any further transitions. Real-world
@@ -838,15 +838,15 @@ test "handler that cancels" {
     };
 
     var countingHandler = CountingHandler.init();
-    sm.setTransitionHandlers(&.{&countingHandler.handler});
-    try sm.addTriggerAndTransition(.click, .on, .off);
-    try sm.addTriggerAndTransition(.click, .off, .on);
+    fsm.setTransitionHandlers(&.{&countingHandler.handler});
+    try fsm.addTriggerAndTransition(.click, .on, .off);
+    try fsm.addTriggerAndTransition(.click, .off, .on);
 
-    try sm.activateTrigger(.click);
-    try sm.activateTrigger(.click);
+    try fsm.activateTrigger(.click);
+    try fsm.activateTrigger(.click);
 
     // Third time will fail
-    try expectError(StateError.Canceled, sm.activateTrigger(.click));
+    try expectError(StateError.Canceled, fsm.activateTrigger(.click));
 }
 
 // Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
@@ -869,18 +869,18 @@ test "comptime dfa: binary alphabet, require even number of zeros in input" {
 
         const State = enum { S1, S2 };
         const Bit = enum { @"0", @"1" };
-        var sm = StateMachine(State, Bit, .S1).init();
-        try sm.importText(input);
+        var fsm = StateMachine(State, Bit, .S1).init();
+        try fsm.importText(input);
 
         // With valid input, we wil end up in the final state
         const valid_input: []const Bit = &.{ .@"0", .@"0", .@"1", .@"1" };
-        for (valid_input) |bit| try sm.activateTrigger(bit);
-        try expect(sm.isInFinalState());
+        for (valid_input) |bit| try fsm.activateTrigger(bit);
+        try expect(fsm.isInFinalState());
 
         // With invalid input, we will not end up in the final state
         const invalid_input: []const Bit = &.{ .@"0", .@"0", .@"0", .@"1" };
-        for (invalid_input) |bit| try sm.activateTrigger(bit);
-        try expect(!sm.isInFinalState());
+        for (invalid_input) |bit| try fsm.activateTrigger(bit);
+        try expect(!fsm.isInFinalState());
     }
 }
 
@@ -914,16 +914,16 @@ test "import: graphviz" {
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8" };
     const Trigger = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
 
-    var sm = StateMachine(State, Trigger, .@"0").init();
-    try sm.importText(input);
+    var fsm = StateMachine(State, Trigger, .@"0").init();
+    try fsm.importText(input);
 
-    try sm.apply(.{ .trigger = .@"SS(B)" });
-    try expectEqual(sm.currentState(), .@"2");
-    try sm.transitionTo(.@"6");
-    try expectEqual(sm.currentState(), .@"6");
+    try fsm.apply(.{ .trigger = .@"SS(B)" });
+    try expectEqual(fsm.currentState(), .@"2");
+    try fsm.transitionTo(.@"6");
+    try expectEqual(fsm.currentState(), .@"6");
     // Self-transition
-    try sm.activateTrigger(.@"S(b)");
-    try expectEqual(sm.currentState(), .@"6");
+    try fsm.activateTrigger(.@"S(b)");
+    try expectEqual(fsm.currentState(), .@"6");
 }
 
 test "import: libfsm text" {
@@ -945,64 +945,62 @@ test "import: libfsm text" {
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5" };
     const Trigger = enum { a, b, c };
 
-    var sm = StateMachine(State, Trigger, .@"0").init();
-    try sm.importText(input);
+    var fsm = StateMachine(State, Trigger, .@"0").init();
+    try fsm.importText(input);
 
-    try expectEqual(sm.currentState(), .@"1");
-    try sm.transitionTo(.@"2");
-    try expectEqual(sm.currentState(), .@"2");
-    try sm.activateTrigger(.a);
-    try expectEqual(sm.currentState(), .@"3");
-    try expect(sm.isInFinalState());
+    try expectEqual(fsm.currentState(), .@"1");
+    try fsm.transitionTo(.@"2");
+    try expectEqual(fsm.currentState(), .@"2");
+    try fsm.activateTrigger(.a);
+    try expectEqual(fsm.currentState(), .@"3");
+    try expect(fsm.isInFinalState());
 }
 
 // Implements the state diagram example from the Graphviz docs
 test "export: graphviz export of finite automaton sample" {
-    //if (true) return;
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8" };
     const Trigger = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
 
-    var sm = StateMachine(State, Trigger, .@"0").init();
+    var fsm = StateMachine(State, Trigger, .@"0").init();
+    try fsm.addTransition(State.@"0", State.@"2");
+    try fsm.addTransition(State.@"0", State.@"1");
+    try fsm.addTransition(State.@"1", State.@"3");
+    try fsm.addTransition(State.@"2", State.@"6");
+    try fsm.addTransition(State.@"2", State.@"5");
+    try fsm.addTransition(State.@"2", State.@"4");
+    try fsm.addTransition(State.@"5", State.@"7");
+    try fsm.addTransition(State.@"5", State.@"5");
+    try fsm.addTransition(State.@"6", State.@"6");
+    try fsm.addTransition(State.@"6", State.@"5");
+    try fsm.addTransition(State.@"7", State.@"8");
+    try fsm.addTransition(State.@"7", State.@"5");
+    try fsm.addTransition(State.@"8", State.@"6");
+    try fsm.addTransition(State.@"8", State.@"5");
 
-    try sm.addTransition(State.@"0", State.@"2");
-    try sm.addTransition(State.@"0", State.@"1");
-    try sm.addTransition(State.@"1", State.@"3");
-    try sm.addTransition(State.@"2", State.@"6");
-    try sm.addTransition(State.@"2", State.@"5");
-    try sm.addTransition(State.@"2", State.@"4");
-    try sm.addTransition(State.@"5", State.@"7");
-    try sm.addTransition(State.@"5", State.@"5");
-    try sm.addTransition(State.@"6", State.@"6");
-    try sm.addTransition(State.@"6", State.@"5");
-    try sm.addTransition(State.@"7", State.@"8");
-    try sm.addTransition(State.@"7", State.@"5");
-    try sm.addTransition(State.@"8", State.@"6");
-    try sm.addTransition(State.@"8", State.@"5");
+    try fsm.addFinalState(State.@"3");
+    try fsm.addFinalState(State.@"4");
+    try fsm.addFinalState(State.@"8");
 
-    try sm.addFinalState(State.@"3");
-    try sm.addFinalState(State.@"4");
-    try sm.addFinalState(State.@"8");
-
-    try sm.addTrigger(.@"SS(B)", .@"0", .@"2");
-    try sm.addTrigger(.@"SS(S)", .@"0", .@"1");
-    try sm.addTrigger(.@"S($end)", .@"1", .@"3");
-    try sm.addTrigger(.@"SS(b)", .@"2", .@"6");
-    try sm.addTrigger(.@"SS(a)", .@"2", .@"5");
-    try sm.addTrigger(.@"S(A)", .@"2", .@"4");
-    try sm.addTrigger(.@"S(b)", .@"5", .@"7");
-    try sm.addTrigger(.@"S(a)", .@"5", .@"5");
-    try sm.addTrigger(.@"S(b)", .@"6", .@"6");
-    try sm.addTrigger(.@"S(a)", .@"6", .@"5");
-    try sm.addTrigger(.@"S(b)", .@"7", .@"8");
-    try sm.addTrigger(.@"S(a)", .@"7", .@"5");
-    try sm.addTrigger(.@"S(b)", .@"8", .@"6");
-    try sm.addTrigger(.@"S(a)", .@"8", .@"5");
+    try fsm.addTrigger(.@"SS(B)", .@"0", .@"2");
+    try fsm.addTrigger(.@"SS(S)", .@"0", .@"1");
+    try fsm.addTrigger(.@"S($end)", .@"1", .@"3");
+    try fsm.addTrigger(.@"SS(b)", .@"2", .@"6");
+    try fsm.addTrigger(.@"SS(a)", .@"2", .@"5");
+    try fsm.addTrigger(.@"S(A)", .@"2", .@"4");
+    try fsm.addTrigger(.@"S(b)", .@"5", .@"7");
+    try fsm.addTrigger(.@"S(a)", .@"5", .@"5");
+    try fsm.addTrigger(.@"S(b)", .@"6", .@"6");
+    try fsm.addTrigger(.@"S(a)", .@"6", .@"5");
+    try fsm.addTrigger(.@"S(b)", .@"7", .@"8");
+    try fsm.addTrigger(.@"S(a)", .@"7", .@"5");
+    try fsm.addTrigger(.@"S(b)", .@"8", .@"6");
+    try fsm.addTrigger(.@"S(a)", .@"8", .@"5");
     // This demonstrates that multiple triggers on the same transition are concatenated with ||
-    try sm.addTrigger(.extra, .@"8", .@"5");
+    try fsm.addTrigger(.extra, .@"8", .@"5");
 
     var outbuf = std.ArrayList(u8).init(std.testing.allocator);
     defer outbuf.deinit();
-    try sm.exportGraphviz("parser_example", outbuf.writer(), .{});
+    try fsm.exportGraphviz("parser_example", outbuf.writer(), .{});
 
     const target =
         \\digraph parser_example {
@@ -1114,46 +1112,46 @@ const ElevatorTest = struct {
     const ElevatorActions = enum { open, close, alarm };
 
     pub fn init() !StateMachine(Elevator, ElevatorActions, .doors_opened) {
-        var sm = StateMachine(Elevator, ElevatorActions, .doors_opened).init();
-        try sm.addTransition(.doors_opened, .doors_closed);
-        try sm.addTransition(.doors_closed, .moving);
-        try sm.addTransition(.moving, .moving);
-        try sm.addTransition(.doors_opened, .exit_light_blinking);
-        try sm.addTransition(.doors_closed, .doors_opened);
-        try sm.addTransition(.exit_light_blinking, .doors_opened);
-        return sm;
+        var fsm = StateMachine(Elevator, ElevatorActions, .doors_opened).init();
+        try fsm.addTransition(.doors_opened, .doors_closed);
+        try fsm.addTransition(.doors_closed, .moving);
+        try fsm.addTransition(.moving, .moving);
+        try fsm.addTransition(.doors_opened, .exit_light_blinking);
+        try fsm.addTransition(.doors_closed, .doors_opened);
+        try fsm.addTransition(.exit_light_blinking, .doors_opened);
+        return fsm;
     }
 };
 
 test "elevator: redefine transition should fail" {
-    var sm = try ElevatorTest.init();
-    try expectError(StateError.AlreadyDefined, sm.addTransition(.doors_opened, .doors_closed));
+    var fsm = try ElevatorTest.init();
+    try expectError(StateError.AlreadyDefined, fsm.addTransition(.doors_opened, .doors_closed));
 }
 
 test "elevator: apply" {
-    var sm = try ElevatorTest.init();
-    try sm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
-    try sm.apply(.{ .state = ElevatorTest.Elevator.doors_closed });
-    try sm.apply(.{ .state = ElevatorTest.Elevator.doors_opened });
-    try sm.apply(.{ .trigger = ElevatorTest.ElevatorActions.alarm });
-    try expect(sm.isCurrently(.exit_light_blinking));
+    var fsm = try ElevatorTest.init();
+    try fsm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
+    try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_closed });
+    try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_opened });
+    try fsm.apply(.{ .trigger = ElevatorTest.ElevatorActions.alarm });
+    try expect(fsm.isCurrently(.exit_light_blinking));
 }
 
 test "elevator: transition success" {
-    var sm = try ElevatorTest.init();
-    try sm.transitionTo(.doors_closed);
-    try expectEqual(sm.currentState(), .doors_closed);
+    var fsm = try ElevatorTest.init();
+    try fsm.transitionTo(.doors_closed);
+    try expectEqual(fsm.currentState(), .doors_closed);
 }
 
 test "elevator: add a trigger and active it" {
-    var sm = try ElevatorTest.init();
+    var fsm = try ElevatorTest.init();
 
     // The same trigger can be invoked for multiple state transitions
-    try sm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
-    try expectEqual(sm.currentState(), .doors_opened);
+    try fsm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
+    try expectEqual(fsm.currentState(), .doors_opened);
 
-    try sm.activateTrigger(.alarm);
-    try expectEqual(sm.currentState(), .exit_light_blinking);
+    try fsm.activateTrigger(.alarm);
+    try expectEqual(fsm.currentState(), .exit_light_blinking);
 }
 
 test "statemachine from transition array" {
