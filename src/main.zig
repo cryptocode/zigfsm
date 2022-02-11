@@ -74,6 +74,9 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             triggers: TriggerPackedIntArray,
         } = undefined,
 
+        pub const StateEnum = StateType;
+        pub const TriggerEnum = if (TriggerType) |T| T else void;
+
         const Self = @This();
 
         /// Transition handler interface
@@ -257,6 +260,36 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             }
         }
 
+        /// An iterator that returns the next possible states
+        pub const PossibleNextStateIterator = struct {
+            fsm: *Self,
+            index: usize = 0,
+
+            /// Next valid state, or null if no more valid states are available
+            pub fn next(self: *@This()) ?StateEnum {
+                inline for (std.meta.fields(StateType)) |field, i| {
+                    if (i == self.index) {
+                        self.index += 1;
+                        if (self.fsm.canTransitionTo(@intToEnum(StateType, field.value))) {
+                            return @intToEnum(StateType, field.value);
+                        }
+                    }
+                }
+
+                return null;
+            }
+
+            /// Restarts the iterator
+            pub fn reset(self: *@This()) void {
+                self.index = 0;
+            }
+        };
+
+        /// Returns an iterator for the next possible states from the current state
+        pub fn validNextStatesIterator(self: *Self) PossibleNextStateIterator {
+            return .{ .fsm = self };
+        }
+
         /// Graphviz export options
         pub const ExportOptions = struct {
             rankdir: []const u8 = "LR",
@@ -273,7 +306,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             try writer.print("digraph {s} {{\n", .{title});
             try writer.print("    rankdir=LR;\n", .{});
             if (options.layout) |layout| try writer.print("    layout={s};\n", .{layout});
-            if (options.show_initial_state) try writer.print("    node [shape = point ]; start:;\n", .{});
+            if (options.show_initial_state) try writer.print("    node [shape = point ]; \"start:\";\n", .{});
 
             // Style for final states
             if (self.internal.final_states.count() > 0) {
@@ -290,7 +323,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             try writer.print("    node [shape = {s} fixedsize = {}];\n", .{ options.shape, options.fixed_shape_size });
 
             if (options.show_initial_state) {
-                try writer.print("    start: -> \"{s}\";\n", .{@tagName(self.internal.start_state)});
+                try writer.print("    \"start:\" -> \"{s}\";\n", .{@tagName(self.internal.start_state)});
             }
 
             var it = self.internal.state_map.iterator(.{ .kind = .set, .direction = .forward });
@@ -1016,34 +1049,63 @@ test "finite state automaton for accepting a 25p car park charge (from Computers
 
     const Sum = enum { sum0, sum5, sum10, sum15, sum20, sum25 };
     const Coin = enum { p5, p10, p20 };
-    var sm = StateMachine(Sum, Coin, .sum0).init();
-    try sm.importText(state_machine);
+    var fsm = StateMachine(Sum, Coin, .sum0).init();
+    try fsm.importText(state_machine);
 
     // Add 5p, 10p and 10p coins
-    try sm.activateTrigger(.p5);
-    try sm.activateTrigger(.p10);
-    try sm.activateTrigger(.p10);
+    try fsm.activateTrigger(.p5);
+    try fsm.activateTrigger(.p10);
+    try fsm.activateTrigger(.p10);
 
     // Car park charge reached
-    try expect(sm.isInFinalState());
+    try expect(fsm.isInFinalState());
 
     // Verify that we're unable to accept more coins
-    try expectError(StateError.Invalid, sm.activateTrigger(.p10));
+    try expectError(StateError.Invalid, fsm.activateTrigger(.p10));
 
     // Restart the state machine and try a different combination to reach 25p
-    sm.restart();
-    try sm.activateTrigger(.p20);
-    try sm.activateTrigger(.p5);
-    try expect(sm.isInFinalState());
+    fsm.restart();
+    try fsm.activateTrigger(.p20);
+    try fsm.activateTrigger(.p5);
+    try expect(fsm.isInFinalState());
 
     // Same as restart(), but makes sure we're currently in the start state or a final state
-    try sm.safeRestart();
-    try sm.activateTrigger(.p10);
-    try expectError(StateError.Invalid, sm.safeRestart());
-    try sm.activateTrigger(.p5);
-    try sm.activateTrigger(.p5);
-    try sm.activateTrigger(.p5);
-    try expect(sm.isInFinalState());
+    try fsm.safeRestart();
+    try fsm.activateTrigger(.p10);
+    try expectError(StateError.Invalid, fsm.safeRestart());
+    try fsm.activateTrigger(.p5);
+    try fsm.activateTrigger(.p5);
+    try fsm.activateTrigger(.p5);
+    try expect(fsm.isInFinalState());
+}
+
+test "iterate next valid states" {
+    const state_machine =
+        \\ sum0  ->  sum5   p5
+        \\ sum0  ->  sum10  p10
+        \\ sum0  ->  sum20  p20
+        \\ sum5  ->  sum10  p5
+        \\ sum5  ->  sum15  p10
+        \\ sum5  ->  sum25  p20
+        \\ sum10 ->  sum15  p5
+        \\ sum10 ->  sum20  p10
+        \\ sum15 ->  sum20  p5
+        \\ sum15 ->  sum25  p10
+        \\ sum20 ->  sum25  p5
+        \\ start: sum0
+        \\ end: sum25
+    ;
+
+    const Sum = enum { sum0, sum5, sum10, sum15, sum20, sum25 };
+    const Coin = enum { p5, p10, p20 };
+    var fsm = StateMachine(Sum, Coin, .sum0).init();
+    try fsm.importText(state_machine);
+
+    var next_valid_iterator = fsm.validNextStatesIterator();
+    try expectEqual(Sum.sum5, next_valid_iterator.next().?);
+    try expectEqual(Sum.sum10, next_valid_iterator.next().?);
+    try expectEqual(Sum.sum20, next_valid_iterator.next().?);
+    try expectEqual(next_valid_iterator.next(), null);
 }
 
 /// An elevator state machine
