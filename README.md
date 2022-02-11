@@ -7,8 +7,8 @@
     * [Building](#building)
     * [Importing the library](#importing-the-library)
     * [Creating a state machine type](#creating-a-state-machine-type)
-    * [Defining state transitions](#defining-state-transitions)
-    * [Add state transitions](#add-state-transitions)
+    * [Making an instance](#making-an-instance)
+    * [Adding state transitions](#adding-state-transitions)
     * [Optionally defining triggers](#optionally-defining-triggers)
     * [Defining transitions and triggers at the same time](#defining-transitions-and-triggers-at-the-same-time)
     * [Defining transitions and triggers as a table](#defining-transitions-and-triggers-as-a-table)
@@ -16,6 +16,7 @@
     * [Probing the current state](#probing-the-current-state)
     * [Transition handlers](#transition-handlers)
     * [Canceling transitions](#canceling-transitions)
+    * [Valid states iterator](#valid-states-iterator)
 ## Motivation
 While hand-written state machines are possible, and sometimes even preferable, using an FSM library like zigfsm have some benefits:
 * An invalid state transition is an immediate error with useful contextual information. Contrast this with the brittleness of manually checking, or even just documenting, which states can follow a certain state when a certain event happens.
