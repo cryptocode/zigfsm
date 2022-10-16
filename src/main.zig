@@ -37,13 +37,14 @@ pub fn Transition(comptime StateType: type, comptime TriggerType: ?type) type {
 
 /// Construct a state machine type given a state enum and an optional trigger enum.
 /// Add states and triggers using the member functions.
-pub fn StateMachine(comptime StateType: type, comptime TriggerType: ?type, initial_state: StateType) type {
+pub fn StateMachine(comptime StateType: type, comptime TriggerType: ?type, comptime initial_state: StateType) type {
     return StateMachineFromTable(StateType, TriggerType, &[0]Transition(StateType, TriggerType){}, initial_state, &[0]StateType{});
 }
 
 /// Construct a state machine type given a state enum, an optional trigger enum, a transition table, initial state and end states (which can be empty)
 /// If you want to add transitions and end states using the member methods, you can use `StateMachine(...)` as a shorthand.
-pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?type, transitions: []const Transition(StateType, TriggerType), initial_state: StateType, final_states: []const StateType) type {
+pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?type, comptime transitions: []const Transition(StateType, TriggerType), comptime initial_state_a: StateType, comptime final_states: []const StateType) type {
+    const initial_state = initial_state_a;
     const StateTriggerSelector = enum { state, trigger };
     const TriggerTypeArg = if (TriggerType) |T| T else void;
     const StateTriggerUnion = union(StateTriggerSelector) {
@@ -74,14 +75,14 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             triggers: TriggerPackedIntArray,
         } = undefined,
 
+        const Self = @This();
         pub const StateEnum = StateType;
         pub const TriggerEnum = if (TriggerType) |T| T else void;
 
-        const Self = @This();
-
         /// Transition handler interface
+        /// You only need to implement the functions you need
         pub const Handler = struct {
-            onTransition: fn (self: *Handler, trigger: ?TriggerTypeArg, from: StateType, to: StateType) HandlerResult,
+            onTransition: *const fn (self: *Handler, trigger: ?TriggerTypeArg, from: StateType, to: StateType) HandlerResult,
         };
 
         /// Returns a new state machine instance
@@ -504,7 +505,7 @@ fn anyStringsEqual(slices: []const []const u8, item: []const u8) bool {
 
 /// Helper type to make it easier to deal with polymorphic types
 pub const Interface = struct {
-    /// We establish the convention that the implementation type has the interface as the 
+    /// We establish the convention that the implementation type has the interface as the
     /// first field, allowing a slightly less verbose interface idiom. This will not compile
     /// if there's a mismatch. When this convention doesn't work, use @fieldParentPtr directly.
     pub fn downcast(comptime Implementer: type, interface_ref: anytype) *Implementer {
@@ -512,7 +513,7 @@ pub const Interface = struct {
         return @fieldParentPtr(Implementer, field_name, interface_ref);
     }
 
-    /// Instantiates an interface type and populates its function pointers to point to 
+    /// Instantiates an interface type and populates its function pointers to point to
     /// proper functions in the given implementer type.
     pub fn make(comptime InterfaceType: type, comptime Implementer: type) InterfaceType {
         var instance: InterfaceType = undefined;
@@ -527,8 +528,8 @@ pub const Interface = struct {
 
 /// An enum generator useful for testing, as well as state machines with sequenced states or triggers.
 /// If `prefix` is an empty string, use @"0", @"1", etc to refer to the enum field.
-pub fn GenerateConsecutiveEnum(prefix: []const u8, element_count: usize) type {
-    const EnumField = std.builtin.TypeInfo.EnumField;
+pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_count: usize) type {
+    const EnumField = std.builtin.Type.EnumField;
     var fields: []const EnumField = &[_]EnumField{};
 
     var i: usize = 0;
@@ -544,7 +545,7 @@ pub fn GenerateConsecutiveEnum(prefix: []const u8, element_count: usize) type {
         .layout = .Auto,
         .fields = fields,
         .tag_type = std.math.IntFittingRange(0, element_count),
-        .decls = &[_]std.builtin.TypeInfo.Declaration{},
+        .decls = &[_]std.builtin.Type.Declaration{},
         .is_exhaustive = false,
     } });
 }
@@ -688,7 +689,8 @@ test "csv parser" {
 
         /// Feeds the input stream through the state machine
         fn read(self: *@This()) !void {
-            var reader = std.io.fixedBufferStream(self.csv).reader();
+            var stream = std.io.fixedBufferStream(self.csv);
+            const reader = stream.reader();
             while (true) : (self.cur_index += 1) {
                 var input = reader.readByte() catch {
                     // An example of how to handle parsing errors
