@@ -852,11 +852,9 @@ test "handler that cancels" {
 }
 
 // Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
+// Comptime state machines finally works in stage2, see https://github.com/ziglang/zig/issues/10694
 test "comptime dfa: binary alphabet, require even number of zeros in input" {
-
-    // Comptime use of triggers is commented out until this is fixed: https://github.com/ziglang/zig/issues/10694
-    //comptime
-    {
+    comptime {
         @setEvalBranchQuota(10_000);
 
         // Note that both "start: S1;" and "start: -> S1;" syntaxes work, same with end:
