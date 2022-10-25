@@ -18,7 +18,10 @@ This library tracks [Zig master](https://github.com/ziglang/zig) and is tested w
     * [Probing the current state](#probing-the-current-state)
     * [Transition handlers](#transition-handlers)
     * [Canceling transitions](#canceling-transitions)
+    * [Alternative to transition handlers](#alternative-to-transition-handlers)
     * [Valid states iterator](#valid-states-iterator)
+    * [Importing state machines](#importing-state-machines)
+
 ## Motivation
 While hand-written state machines are possible, and sometimes even preferable, using an FSM library like zigfsm have some benefits:
 * An invalid state transition is an immediate error with useful contextual information. Contrast this with the brittleness of manually checking, or even just documenting, which states can follow a certain state when a certain event happens.
@@ -31,6 +34,7 @@ While hand-written state machines are possible, and sometimes even preferable, u
 * Fast state transition validation
 * State machines can export themselves to the Graphviz DOT format
 * Defined programmatically or by importing Graphviz or libfsm text
+* Imported state machines can auto-generate state- and trigger enums at compile time
 * Listeners can add functionality and conditionally cancel transitions
 * Comprehensive test coverage which also serves as examples
 
@@ -241,6 +245,19 @@ The transition handler can conditionally stop a transition from happening by ret
 
 Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)
 
+#### Alternative to transition handlers
+Zig makes it a bit cumbersome to use callbacks where interfaces or lambdas are often used in other languages.
+
+An alternative that often works is to use this pattern:
+
+```zig
+const from = fsm.currentState();
+try fsm.activateTrigger(.identifier)
+const to = fsm.currentState();
+```
+
+Followed by an if/else chain that checks relevant combinations of from- and to states. This could, as an example, be used in a parser loop.
+
 ### Valid states iterator
 
 It's occasionally useful to know which states are possible to reach from the current state. This is done using an iterator:
@@ -250,3 +267,15 @@ while (fsm.validNextStatesIterator()) |valid_next_state| {
     ...
 }
 ```
+
+### Importing state machines
+
+It's possible, even at compile time, to parse a `Graphviz` or `libfsm` text file and create a state machine from this.
+
+* `importText` is used when you already have state- and trigger enums defined in Zig. `importText` can also be called at runtime to define state transitions.
+
+* `generateStateMachineFromText` is used when you want the compiler to generate these enums for you. While this saves you from writing enums manually, a downside is that editors and language servers are unlikely to support autocomplete on generated types.
+
+The source input can be a string literal, or brought in by `@embedFile`.
+
+See the test cases for examples on how to use the import features.

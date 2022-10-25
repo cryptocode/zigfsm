@@ -4,6 +4,7 @@
 //! Licence: MIT
 
 const std = @import("std");
+const EnumField = std.builtin.Type.EnumField;
 
 /// State transition errors
 pub const StateError = error{
@@ -34,6 +35,26 @@ pub fn Transition(comptime StateType: type, comptime TriggerType: ?type) type {
         to: StateType,
     };
 }
+const ImportLineState = enum { ready, source, target, trigger, await_start_state, startstate, await_end_states, endstates };
+const ImportInput = enum { identifier, startcolon, endcolon, newline };
+const import_transition_table = [_]Transition(ImportLineState, ImportInput){
+    .{ .trigger = .identifier, .from = .ready, .to = .source },
+    .{ .trigger = .identifier, .from = .target, .to = .trigger },
+    .{ .trigger = .identifier, .from = .trigger, .to = .trigger },
+    .{ .trigger = .identifier, .from = .await_start_state, .to = .startstate },
+    .{ .trigger = .identifier, .from = .await_end_states, .to = .endstates },
+    .{ .trigger = .identifier, .from = .endstates, .to = .endstates },
+    .{ .trigger = .identifier, .from = .source, .to = .target },
+    .{ .trigger = .startcolon, .from = .ready, .to = .await_start_state },
+    .{ .trigger = .endcolon, .from = .ready, .to = .await_end_states },
+    .{ .trigger = .newline, .from = .ready, .to = .ready },
+    .{ .trigger = .newline, .from = .startstate, .to = .ready },
+    .{ .trigger = .newline, .from = .endstates, .to = .ready },
+    .{ .trigger = .newline, .from = .target, .to = .ready },
+    .{ .trigger = .newline, .from = .trigger, .to = .ready },
+};
+
+const ImportFSM = StateMachineFromTable(ImportLineState, ImportInput, import_transition_table[0..], .ready, &.{});
 
 /// Construct a state machine type given a state enum and an optional trigger enum.
 /// Add states and triggers using the member functions.
@@ -363,6 +384,59 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             try writer.print("}}\n", .{});
         }
 
+        const ImportParseHandler = struct {
+            handler: ImportFSM.Handler,
+            fsm: *Self,
+            from: ?StateType = null,
+            to: ?StateType = null,
+            current_identifer: []const u8 = "",
+
+            pub fn init(fsmptr: *Self) @This() {
+                return .{
+                    .handler = Interface.make(ImportFSM.Handler, @This()),
+                    .fsm = fsmptr,
+                };
+            }
+
+            pub fn onTransition(handler: *ImportFSM.Handler, trigger: ?ImportInput, from: ImportLineState, to: ImportLineState) HandlerResult {
+                const parse_handler = Interface.downcast(@This(), handler);
+                _ = from;
+                _ = trigger;
+
+                if (to == .startstate) {
+                    const start_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
+                    if (start_enum) |e| parse_handler.fsm.setStartState(e);
+                } else if (to == .endstates) {
+                    const end_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
+                    if (end_enum) |e| parse_handler.fsm.addFinalState(e) catch return HandlerResult.Cancel;
+                } else if (to == .source) {
+                    const from_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
+                    parse_handler.from = from_enum;
+                } else if (to == .target) {
+                    const to_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
+                    parse_handler.to = to_enum;
+                    if (parse_handler.from != null and parse_handler.to != null) {
+                        parse_handler.fsm.addTransition(parse_handler.from.?, parse_handler.to.?) catch |e| {
+                            if (e != StateError.AlreadyDefined) return HandlerResult.Cancel;
+                        };
+                    }
+                } else if (to == .trigger) {
+                    if (TriggerType != null) {
+                        const trigger_enum = std.meta.stringToEnum(TriggerType.?, parse_handler.current_identifer);
+                        if (trigger_enum) |te| {
+                            parse_handler.fsm.addTrigger(te, parse_handler.from.?, parse_handler.to.?) catch {
+                                return HandlerResult.Cancel;
+                            };
+                        }
+                    } else {
+                        return HandlerResult.Cancel;
+                    }
+                }
+
+                return HandlerResult.Continue;
+            }
+        };
+
         /// Reads a state machine from a buffer containing Graphviz or libfsm text.
         /// Any currently existing transitions are preserved.
         /// Parsing is supported at both comptime and runtime.
@@ -390,83 +464,10 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
 
             // Might as well use a state machine to implement importing textual state machines.
             // After an input event, we'll end up in one of these states:
-            const LineState = enum { ready, source, target, trigger, await_start_state, startstate, await_end_states, endstates };
-            const Input = enum { identifier, startcolon, endcolon, newline };
-            const transition_table = [_]Transition(LineState, Input){
-                .{ .trigger = .identifier, .from = .ready, .to = .source },
-                .{ .trigger = .identifier, .from = .target, .to = .trigger },
-                .{ .trigger = .identifier, .from = .trigger, .to = .trigger },
-                .{ .trigger = .identifier, .from = .await_start_state, .to = .startstate },
-                .{ .trigger = .identifier, .from = .await_end_states, .to = .endstates },
-                .{ .trigger = .identifier, .from = .endstates, .to = .endstates },
-                .{ .trigger = .identifier, .from = .source, .to = .target },
-                .{ .trigger = .startcolon, .from = .ready, .to = .await_start_state },
-                .{ .trigger = .endcolon, .from = .ready, .to = .await_end_states },
-                .{ .trigger = .newline, .from = .ready, .to = .ready },
-                .{ .trigger = .newline, .from = .startstate, .to = .ready },
-                .{ .trigger = .newline, .from = .endstates, .to = .ready },
-                .{ .trigger = .newline, .from = .target, .to = .ready },
-                .{ .trigger = .newline, .from = .trigger, .to = .ready },
-            };
+            var fsm = ImportFSM.init();
 
-            const FSM = StateMachineFromTable(LineState, Input, transition_table[0..], .ready, &.{});
-            var fsm = FSM.init();
-
-            const ParseHandler = struct {
-                handler: FSM.Handler,
-                fsm: *Self,
-                from: ?StateType = null,
-                to: ?StateType = null,
-                current_identifer: []const u8 = "",
-
-                pub fn init(fsmptr: *Self) @This() {
-                    return .{
-                        .handler = Interface.make(FSM.Handler, @This()),
-                        .fsm = fsmptr,
-                    };
-                }
-
-                pub fn onTransition(handler: *FSM.Handler, trigger: ?Input, from: LineState, to: LineState) HandlerResult {
-                    const parse_handler = Interface.downcast(@This(), handler);
-                    _ = from;
-                    _ = trigger;
-
-                    if (to == .startstate) {
-                        const start_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
-                        if (start_enum) |e| parse_handler.fsm.setStartState(e);
-                    } else if (to == .endstates) {
-                        const end_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
-                        if (end_enum) |e| parse_handler.fsm.addFinalState(e) catch return HandlerResult.Cancel;
-                    } else if (to == .source) {
-                        const from_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
-                        parse_handler.from = from_enum;
-                    } else if (to == .target) {
-                        const to_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
-                        parse_handler.to = to_enum;
-                        if (parse_handler.from != null and parse_handler.to != null) {
-                            parse_handler.fsm.addTransition(parse_handler.from.?, parse_handler.to.?) catch |e| {
-                                if (e != StateError.AlreadyDefined) return HandlerResult.Cancel;
-                            };
-                        }
-                    } else if (to == .trigger) {
-                        if (TriggerType != null) {
-                            const trigger_enum = std.meta.stringToEnum(TriggerType.?, parse_handler.current_identifer);
-                            if (trigger_enum) |te| {
-                                parse_handler.fsm.addTrigger(te, parse_handler.from.?, parse_handler.to.?) catch {
-                                    return HandlerResult.Cancel;
-                                };
-                            }
-                        } else {
-                            return HandlerResult.Cancel;
-                        }
-                    }
-
-                    return HandlerResult.Continue;
-                }
-            };
-
-            var parse_handler = ParseHandler.init(self);
-            var handlers: [1]*FSM.Handler = .{&parse_handler.handler};
+            var parse_handler = ImportParseHandler.init(self);
+            var handlers: [1]*ImportFSM.Handler = .{&parse_handler.handler};
             fsm.setTransitionHandlers(&handlers);
 
             var line_no: usize = 1;
@@ -493,6 +494,103 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             try fsm.activateTrigger(.newline);
         }
     };
+}
+
+/// Generates a state machine from a file containing Graphviz or libfsm text
+/// including the necessary state/event enum types. An instance is created and returned.
+///
+/// You can combine this with @embedFile to generate a state machine at
+/// compile time from an external text file.
+pub fn generateStateMachineFromText(comptime input: []const u8) !FsmFromText(input) {
+    const FSM = FsmFromText(input);
+    var fsm = FSM.init();
+    try fsm.importText(input);
+    return fsm;
+}
+
+/// Generates a state machine from a file containing Graphviz or libfsm text
+/// including the necessary state/event enum types. The generated type is returned.
+pub fn FsmFromText(comptime input: []const u8) type {
+    comptime {
+        @setEvalBranchQuota(100_000);
+
+        // Might as well use a state machine to implement importing textual state machines.
+        // After an input event, we'll end up in one of these states:
+        comptime var fsm = ImportFSM.init();
+
+        var state_enum_fields: []const EnumField = &[_]EnumField{};
+        var trigger_enum_fields: []const EnumField = &[_]EnumField{};
+
+        var line_no: usize = 1;
+        var lines = std.mem.split(u8, input, "\n");
+        var start_state_index: usize = 0;
+        while (lines.next()) |line| {
+            if (std.mem.indexOf(u8, line, "->") == null and std.mem.indexOf(u8, line, "start:") == null and std.mem.indexOf(u8, line, "end:") == null) continue;
+            var parts = std.mem.tokenize(u8, line, " \t='\";,");
+            part_loop: while (parts.next()) |part| {
+                if (anyStringsEqual(&.{ "->", "[label", "]", "||" }, part)) {
+                    continue;
+                } else if (std.mem.eql(u8, part, "start:")) {
+                    fsm.activateTrigger(.startcolon) catch unreachable;
+                } else if (std.mem.eql(u8, part, "end:")) {
+                    fsm.activateTrigger(.endcolon) catch unreachable;
+                } else {
+                    var current_identifier = part;
+                    fsm.activateTrigger(.identifier) catch unreachable;
+                    const to = fsm.currentState();
+
+                    if (to == .startstate or to == .endstates or to == .source or to == .target) {
+                        inline for (state_enum_fields) |field| {
+                            if (std.mem.eql(u8, field.name, current_identifier)) {
+                                continue :part_loop;
+                            }
+                        }
+
+                        if (to == .startstate) {
+                            start_state_index = state_enum_fields.len;
+                        }
+
+                        state_enum_fields = state_enum_fields ++ &[_]EnumField{.{
+                            .name = current_identifier,
+                            .value = state_enum_fields.len,
+                        }};
+                    } else if (to == .trigger) {
+                        inline for (trigger_enum_fields) |field| {
+                            if (std.mem.eql(u8, field.name, current_identifier)) {
+                                continue :part_loop;
+                            }
+                        }
+
+                        trigger_enum_fields = trigger_enum_fields ++ &[_]EnumField{.{
+                            .name = current_identifier,
+                            .value = trigger_enum_fields.len,
+                        }};
+                    }
+                }
+            }
+            fsm.activateTrigger(.newline) catch unreachable;
+            line_no += 1;
+        }
+        fsm.activateTrigger(.newline) catch unreachable;
+
+        const StateEnum = @Type(.{ .Enum = .{
+            .layout = .Auto,
+            .fields = state_enum_fields,
+            .tag_type = std.math.IntFittingRange(0, state_enum_fields.len),
+            .decls = &[_]std.builtin.Type.Declaration{},
+            .is_exhaustive = false,
+        } });
+
+        const TriggerEnum = if (trigger_enum_fields.len > 0) @Type(.{ .Enum = .{
+            .layout = .Auto,
+            .fields = trigger_enum_fields,
+            .tag_type = std.math.IntFittingRange(0, trigger_enum_fields.len),
+            .decls = &[_]std.builtin.Type.Declaration{},
+            .is_exhaustive = false,
+        } }) else null;
+
+        return StateMachine(StateEnum, TriggerEnum, @intToEnum(StateEnum, start_state_index));
+    }
 }
 
 /// Helper that returns true if any of the slices are equal to the item
@@ -529,7 +627,6 @@ pub const Interface = struct {
 /// An enum generator useful for testing, as well as state machines with sequenced states or triggers.
 /// If `prefix` is an empty string, use @"0", @"1", etc to refer to the enum field.
 pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_count: usize) type {
-    const EnumField = std.builtin.Type.EnumField;
     var fields: []const EnumField = &[_]EnumField{};
 
     var i: usize = 0;
@@ -651,7 +748,7 @@ test "csv parser" {
 
     // Intentionally badly formatted csv to exercise corner cases
     const csv_input =
-        \\"first",second,"third",4 
+        \\"first",second,"third",4
         \\  "more", right, here, 5
         \\  1,,b,c
     ;
@@ -850,6 +947,8 @@ test "handler that cancels" {
     // Third time will fail
     try expectError(StateError.Canceled, fsm.activateTrigger(.click));
 }
+
+test "Generate state machine enums from graphviz input" {}
 
 // Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
 // Comptime state machines finally works in stage2, see https://github.com/ziglang/zig/issues/10694
@@ -1103,6 +1202,38 @@ test "iterate next valid states" {
     try expectEqual(Sum.sum5, next_valid_iterator.next().?);
     try expectEqual(Sum.sum10, next_valid_iterator.next().?);
     try expectEqual(Sum.sum20, next_valid_iterator.next().?);
+    try expectEqual(next_valid_iterator.next(), null);
+}
+
+// You don't actually need to define the state and trigger enums manually, but
+// rather generate them at compile-time from a string or embedded text file.
+//
+// A downside is that editors are unlikely to autocomplete generated types
+test "iterate next valid states, using state machine with generated enums" {
+    const state_machine =
+        \\ sum0  ->  sum5   p5
+        \\ sum0  ->  sum10  p10
+        \\ sum0  ->  sum20  p20
+        \\ sum5  ->  sum10  p5
+        \\ sum5  ->  sum15  p10
+        \\ sum5  ->  sum25  p20
+        \\ sum10 ->  sum15  p5
+        \\ sum10 ->  sum20  p10
+        \\ sum15 ->  sum20  p5
+        \\ sum15 ->  sum25  p10
+        \\ sum20 ->  sum25  p5
+        \\ start: sum0
+        \\ end: sum25
+    ;
+
+    var fsm = try generateStateMachineFromText(state_machine);
+    const State = @TypeOf(fsm).StateEnum;
+    _ = @TypeOf(fsm).TriggerEnum;
+
+    var next_valid_iterator = fsm.validNextStatesIterator();
+    try expectEqual(State.sum5, next_valid_iterator.next().?);
+    try expectEqual(State.sum10, next_valid_iterator.next().?);
+    try expectEqual(State.sum20, next_valid_iterator.next().?);
     try expectEqual(next_valid_iterator.next(), null);
 }
 
