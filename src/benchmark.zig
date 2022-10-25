@@ -27,12 +27,12 @@ pub fn main() !void {
         inline while (tc < changes_per_iteration / 8) : (tc += 1) {
             try fsm.transitionTo(.S1);
             try fsm.transitionTo(.S0);
-            try fsm.activateTrigger(.T0);
-            try fsm.activateTrigger(.T0);
+            _ = try fsm.activateTrigger(.T0);
+            _ = try fsm.activateTrigger(.T0);
             try fsm.transitionTo(.S1);
             try fsm.transitionTo(.S0);
-            try fsm.activateTrigger(.T19);
-            try fsm.activateTrigger(.T19);
+            _ = try fsm.activateTrigger(.T19);
+            _ = try fsm.activateTrigger(.T19);
         }
     }
 

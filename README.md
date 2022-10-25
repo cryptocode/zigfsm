@@ -245,18 +245,24 @@ The transition handler can conditionally stop a transition from happening by ret
 
 Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)
 
-#### Alternative to transition handlers
+### Alternative to transition handlers
 Zig makes it a bit cumbersome to use callbacks where interfaces or lambdas are often used in other languages.
 
 An alternative that often works is to use this pattern:
 
 ```zig
-const from = fsm.currentState();
-try fsm.activateTrigger(.identifier)
-const to = fsm.currentState();
+const transition = try fsm.activateTrigger(.identifier);
+
+if (transition.to == .jumping and transition.from == .running) {
+    ...
+}
 ```
 
+... where `transition` contains the fields `from`, `to` and `trigger`.
+
 Followed by an if/else chain that checks relevant combinations of from- and to states. This could, as an example, be used in a parser loop.
+
+See the tests for examples.
 
 ### Valid states iterator
 
