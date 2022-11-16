@@ -1093,8 +1093,6 @@ test "handler that cancels" {
     try expectError(StateError.Canceled, fsm.do(.click));
 }
 
-test "Generate state machine enums from graphviz input" {}
-
 // Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
 // Comptime state machines finally works in stage2, see https://github.com/ziglang/zig/issues/10694
 test "comptime dfa: binary alphabet, require even number of zeros in input" {
