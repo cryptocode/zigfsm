@@ -3,8 +3,8 @@
 This library tracks [Zig master](https://github.com/ziglang/zig) and is tested with the `stage2` compiler. Last test was on Zig version `0.11.0-dev.175+7eed028f9`
 
 ## Table of contents
-* [Motivation](#motivation)
 * [Features](#features)
+* [Motivation](#motivation)
 * [Using zigfsm](#using-zigfsm)
     * [Building](#building)
     * [Importing the library](#importing-the-library)
@@ -22,25 +22,25 @@ This library tracks [Zig master](https://github.com/ziglang/zig) and is tested w
     * [Valid states iterator](#valid-states-iterator)
     * [Importing state machines](#importing-state-machines)
 
-## Motivation
-While hand-written state machines are possible, and sometimes even preferable, using an FSM library like zigfsm have some benefits:
-* An invalid state transition is an immediate error with useful contextual information. Contrast this with the brittleness of manually checking, or even just documenting, which states can follow a certain state when a certain event happens.
-* Many real-world processes, algorithms, and protocols have rigorously defined state machines available. Translating these into programmatic FSMs is often surprisingly easy.
-* Can lead to significant simplification in code, and all transition rules are sited in one place. Adding a new event is a simple entry, and triggering that event in an invalid state won't go unnoticed.
-* You get visualization for free, which is helpful during development, debugging and as documentation.
-
 ## Features
-* Never allocates and works at both comptime (*) and runtime
-* Fast state transition validation
+* Never allocates
+* Works at both comptime and runtime
+* Fast transition validation
+* Compact memory representation
 * State machines can export themselves to the Graphviz DOT format
 * Defined programmatically or by importing Graphviz or libfsm text
-* Imported state machines can auto-generate state- and event enums at compile time
+* Imported state machines can autogenerate state- and event enums at compile time
 * Listeners can add functionality and conditionally cancel transitions
 * Comprehensive test coverage which also serves as examples
 
-**) Comptime will work in more cases after this is fixed: https://github.com/ziglang/zig/issues/10694*
-## Using zigfsm
+## Motivation
+Using an FSM library may have some benefits over hand-written state machines:
+* Many real-world processes, algorithms, and protocols have rigorously defined state machines available. These can be imported directly or programmatically into zigfsm.
+* Can lead to significant simplification in code, and all transition rules are sited in one place.
+* An invalid state transition is an immediate error with useful contextual information. Contrast this with the brittleness of manually checking, or even just documenting, which states can follow a certain state when a certain event happens.
+* You get visualization for free, which is helpful during development, debugging and as documentation.
 
+## Using zigfsm
 Before diving into code, it's worth repeating that zigfsm state machines can generate their own diagram, as well as import them. This can be immensely helpful when working on your state machines,
 as you get a simple visualization of all transitions and events. Obviously, the diagrams can be used as part of your documentation as well.
 
