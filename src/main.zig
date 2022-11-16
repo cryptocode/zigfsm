@@ -1,6 +1,6 @@
 //! The zigfsm library implements two state machine types, StateMachineFromTable and StateMachine.
-//! The first type is defined using an array of triggers and state transitions.
-//! The second type is defined using methods for adding triggers and transitions.
+//! The first type is defined using an array of events and state transitions.
+//! The second type is defined using methods for adding events and transitions.
 //! Licence: MIT
 
 const std = @import("std");
@@ -12,7 +12,7 @@ pub const StateError = error{
     Invalid,
     /// A state transition was canceled
     Canceled,
-    /// A trigger or state transition has already been defined
+    /// An event or state transition has already been defined
     AlreadyDefined,
 };
 
@@ -27,64 +27,65 @@ pub const HandlerResult = enum {
     CancelNoError,
 };
 
-/// A transition, with optional trigger
-pub fn Transition(comptime StateType: type, comptime TriggerType: ?type) type {
+/// A transition, with optional event
+pub fn Transition(comptime StateType: type, comptime EventType: ?type) type {
     return struct {
-        trigger: if (TriggerType) |T| ?T else ?void = null,
+        event: if (EventType) |T| ?T else ?void = null,
         from: StateType,
         to: StateType,
     };
 }
-const ImportLineState = enum { ready, source, target, trigger, await_start_state, startstate, await_end_states, endstates };
+const ImportLineState = enum { ready, source, target, event, await_start_state, startstate, await_end_states, endstates };
 const ImportInput = enum { identifier, startcolon, endcolon, newline };
 const import_transition_table = [_]Transition(ImportLineState, ImportInput){
-    .{ .trigger = .identifier, .from = .ready, .to = .source },
-    .{ .trigger = .identifier, .from = .target, .to = .trigger },
-    .{ .trigger = .identifier, .from = .trigger, .to = .trigger },
-    .{ .trigger = .identifier, .from = .await_start_state, .to = .startstate },
-    .{ .trigger = .identifier, .from = .await_end_states, .to = .endstates },
-    .{ .trigger = .identifier, .from = .endstates, .to = .endstates },
-    .{ .trigger = .identifier, .from = .source, .to = .target },
-    .{ .trigger = .startcolon, .from = .ready, .to = .await_start_state },
-    .{ .trigger = .endcolon, .from = .ready, .to = .await_end_states },
-    .{ .trigger = .newline, .from = .ready, .to = .ready },
-    .{ .trigger = .newline, .from = .startstate, .to = .ready },
-    .{ .trigger = .newline, .from = .endstates, .to = .ready },
-    .{ .trigger = .newline, .from = .target, .to = .ready },
-    .{ .trigger = .newline, .from = .trigger, .to = .ready },
+    .{ .event = .identifier, .from = .ready, .to = .source },
+    .{ .event = .identifier, .from = .target, .to = .event },
+    .{ .event = .identifier, .from = .event, .to = .event },
+    .{ .event = .identifier, .from = .await_start_state, .to = .startstate },
+    .{ .event = .identifier, .from = .await_end_states, .to = .endstates },
+    .{ .event = .identifier, .from = .endstates, .to = .endstates },
+    .{ .event = .identifier, .from = .source, .to = .target },
+    .{ .event = .startcolon, .from = .ready, .to = .await_start_state },
+    .{ .event = .endcolon, .from = .ready, .to = .await_end_states },
+    .{ .event = .newline, .from = .ready, .to = .ready },
+    .{ .event = .newline, .from = .startstate, .to = .ready },
+    .{ .event = .newline, .from = .endstates, .to = .ready },
+    .{ .event = .newline, .from = .target, .to = .ready },
+    .{ .event = .newline, .from = .event, .to = .ready },
 };
 
 const ImportFSM = StateMachineFromTable(ImportLineState, ImportInput, import_transition_table[0..], .ready, &.{});
 
-/// Construct a state machine type given a state enum and an optional trigger enum.
-/// Add states and triggers using the member functions.
-pub fn StateMachine(comptime StateType: type, comptime TriggerType: ?type, comptime initial_state: StateType) type {
-    return StateMachineFromTable(StateType, TriggerType, &[0]Transition(StateType, TriggerType){}, initial_state, &[0]StateType{});
+/// Construct a state machine type given a state enum and an optional event enum.
+/// Add states and events using the member functions.
+pub fn StateMachine(comptime StateType: type, comptime EventType: ?type, comptime initial_state: StateType) type {
+    return StateMachineFromTable(StateType, EventType, &[0]Transition(StateType, EventType){}, initial_state, &[0]StateType{});
 }
 
-/// Construct a state machine type given a state enum, an optional trigger enum, a transition table, initial state and end states (which can be empty)
+/// Construct a state machine type given a state enum, an optional event enum, a transition table, initial state and end states (which can be empty)
 /// If you want to add transitions and end states using the member methods, you can use `StateMachine(...)` as a shorthand.
-pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?type, comptime transitions: []const Transition(StateType, TriggerType), comptime initial_state_a: StateType, comptime final_states: []const StateType) type {
+pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type, comptime transitions: []const Transition(StateType, EventType), comptime initial_state_a: StateType, comptime final_states: []const StateType) type {
     const initial_state = initial_state_a;
-    const StateTriggerSelector = enum { state, trigger };
-    const TriggerTypeArg = if (TriggerType) |T| T else void;
-    const StateTriggerUnion = union(StateTriggerSelector) {
+    const StateEventSelector = enum { state, event };
+    const EventTypeArg = if (EventType) |T| T else void;
+    const StateEventUnion = union(StateEventSelector) {
         state: StateType,
-        trigger: if (TriggerType) |T| T else void,
+        event: if (EventType) |T| T else void,
     };
 
     const state_type_count = comptime std.meta.fields(StateType).len;
-    const trigger_type_count = comptime if (TriggerType) |T| std.meta.fields(T).len else 0;
+    const event_type_count = comptime if (EventType) |T| std.meta.fields(T).len else 0;
     const TransitionBitSet = std.StaticBitSet(state_type_count * state_type_count);
+    const FinalStatesType = std.StaticBitSet(state_type_count);
 
     const state_enum_bits = std.math.log2_int_ceil(usize, state_type_count);
-    const trigger_enum_bits = if (trigger_type_count > 0) std.math.log2_int_ceil(usize, trigger_type_count) else 0;
+    const event_enum_bits = if (event_type_count > 0) std.math.log2_int_ceil(usize, event_type_count) else 0;
 
-    // Add 1 to bit_count because zero is used to indicates absence of transition (no target state defined for a source state/trigger combination)
+    // Events are organized into a packed 2D array. Indexing by state and event yields the next state (where 0 means no transition)
+    // Add 1 to bit_count because zero is used to indicates absence of transition (no target state defined for a source state/event combination)
     // Cell values must thus be adjusted accordingly when added or queried.
-    const CellType = std.meta.Int(.unsigned, std.math.max(state_enum_bits, trigger_enum_bits) + 1);
-    const TriggerPackedIntArray = if (TriggerType != null) std.PackedIntArray(CellType, state_type_count * std.math.max(trigger_type_count, 1)) else void;
-    const FinalStatesType = std.StaticBitSet(state_type_count);
+    const CellType = std.meta.Int(.unsigned, std.math.max(state_enum_bits, event_enum_bits) + 1);
+    const EventPackedIntArray = if (EventType != null) std.PackedIntArray(CellType, state_type_count * std.math.max(event_type_count, 1)) else void;
 
     return struct {
         internal: struct {
@@ -92,18 +93,18 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             current_state: StateType,
             state_map: TransitionBitSet,
             final_states: FinalStatesType,
-            transition_handlers: []*Handler,
-            triggers: TriggerPackedIntArray,
+            transition_handlers: []const *Handler,
+            events: EventPackedIntArray,
         } = undefined,
 
         const Self = @This();
         pub const StateEnum = StateType;
-        pub const TriggerEnum = if (TriggerType) |T| T else void;
+        pub const EventEnum = if (EventType) |T| T else void;
 
         /// Transition handler interface
         /// You only need to implement the functions you need
         pub const Handler = struct {
-            onTransition: *const fn (self: *Handler, trigger: ?TriggerTypeArg, from: StateType, to: StateType) HandlerResult,
+            onTransition: *const fn (self: *Handler, event: ?EventTypeArg, from: StateType, to: StateType) HandlerResult,
         };
 
         /// Returns a new state machine instance
@@ -114,16 +115,16 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             instance.internal.final_states = FinalStatesType.initEmpty();
             instance.internal.transition_handlers = &.{};
             instance.internal.state_map = TransitionBitSet.initEmpty();
-            if (comptime TriggerType != null) instance.internal.triggers = TriggerPackedIntArray.initAllTo(0);
+            if (comptime EventType != null) instance.internal.events = EventPackedIntArray.initAllTo(0);
 
             for (transitions) |t| {
                 var offset = (@enumToInt(t.from) * state_type_count) + @enumToInt(t.to);
                 instance.internal.state_map.setValue(offset, true);
 
-                if (comptime TriggerType != null) {
-                    if (t.trigger) |trigger| {
-                        const slot = computeTriggerSlot(trigger, t.from);
-                        instance.internal.triggers.set(slot, @enumToInt(t.to) + @as(CellType, 1));
+                if (comptime EventType != null) {
+                    if (t.event) |event| {
+                        const slot = computeEventSlot(event, t.from);
+                        instance.internal.events.set(slot, @enumToInt(t.to) + @as(CellType, 1));
                     }
                 }
             }
@@ -132,6 +133,13 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
                 instance.internal.final_states.setValue(@enumToInt(f), true);
             }
 
+            return instance;
+        }
+
+        /// Create a new state machine instance, with state transitions imported from the given Graphviz or libfsm text
+        pub fn initFrom(input: []const u8) !Self {
+            var instance = Self.init();
+            try instance.importText(input);
             return instance;
         }
 
@@ -184,47 +192,48 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
         }
 
         /// Invoke all `handlers` when a state transition happens
-        pub fn setTransitionHandlers(self: *Self, handlers: []*Handler) void {
+        pub fn setTransitionHandlers(self: *Self, handlers: []const *Handler) void {
             self.internal.transition_handlers = handlers;
         }
 
-        /// Add the transition `from` -> `to` if missing, and define a trigger for the transition
-        pub fn addTriggerAndTransition(self: *Self, trigger: TriggerTypeArg, from: StateType, to: StateType) !void {
-            if (comptime TriggerType != null) {
+        /// Add the transition `from` -> `to` if missing, and define an event for the transition
+        pub fn addEventAndTransition(self: *Self, event: EventTypeArg, from: StateType, to: StateType) !void {
+            if (comptime EventType != null) {
                 if (!self.canTransitionFromTo(from, to)) try self.addTransition(from, to);
-                try self.addTrigger(trigger, from, to);
+                try self.addEvent(event, from, to);
             }
         }
 
-        fn computeTriggerSlot(trigger: TriggerTypeArg, from: StateType) usize {
-            return @intCast(usize, @enumToInt(from)) * trigger_type_count + @enumToInt(trigger);
-        }
-
-        /// Check if the transition `from` -> `to` is valid and add the trigger for this transition
-        pub fn addTrigger(self: *Self, trigger: TriggerTypeArg, from: StateType, to: StateType) !void {
-            if (comptime TriggerType != null) {
+        /// Check if the transition `from` -> `to` is valid and add the event for this transition
+        pub fn addEvent(self: *Self, event: EventTypeArg, from: StateType, to: StateType) !void {
+            if (comptime EventType != null) {
                 if (self.canTransitionFromTo(from, to)) {
-                    var slot = computeTriggerSlot(trigger, from);
-                    if (self.internal.triggers.get(slot) != 0) return StateError.AlreadyDefined;
-                    self.internal.triggers.set(slot, @intCast(CellType, @enumToInt(to)) + 1);
+                    var slot = computeEventSlot(event, from);
+                    if (self.internal.events.get(slot) != 0) return StateError.AlreadyDefined;
+                    self.internal.events.set(slot, @intCast(CellType, @enumToInt(to)) + 1);
                 } else return StateError.Invalid;
             }
         }
 
-        /// Trigger a transition
-        /// Returns `StateError.Invalid` if the trigger is not defined for the current state
-        pub fn activateTrigger(self: *Self, trigger: TriggerTypeArg) !Transition(StateType, TriggerType) {
-            if (comptime TriggerType != null) {
+        /// Trigger a transition using an event
+        /// Returns `StateError.Invalid` if the event is not defined for the current state
+        pub fn do(self: *Self, event: EventTypeArg) !Transition(StateType, EventType) {
+            if (comptime EventType != null) {
                 var from_state = self.internal.current_state;
-                var slot = computeTriggerSlot(trigger, self.internal.current_state);
-                var to_state = self.internal.triggers.get(slot);
+                var slot = computeEventSlot(event, self.internal.current_state);
+                var to_state = self.internal.events.get(slot);
                 if (to_state != 0) {
-                    try self.transitionToInternal(trigger, @intToEnum(StateType, to_state - 1));
-                    return .{ .trigger = trigger, .from = from_state, .to = @intToEnum(StateType, to_state - 1) };
+                    try self.transitionToInternal(event, @intToEnum(StateType, to_state - 1));
+                    return .{ .event = event, .from = from_state, .to = @intToEnum(StateType, to_state - 1) };
                 } else {
                     return StateError.Invalid;
                 }
             }
+        }
+
+        /// Given an event and a from-state (usually the current state), return the slot index for the to-state
+        fn computeEventSlot(event: EventTypeArg, from: StateType) usize {
+            return @intCast(usize, @enumToInt(from)) * event_type_count + @enumToInt(event);
         }
 
         /// Add a valid state transition
@@ -258,13 +267,13 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             return self.transitionToInternal(null, new_state);
         }
 
-        fn transitionToInternal(self: *Self, trigger: ?TriggerTypeArg, new_state: StateType) StateError!void {
+        fn transitionToInternal(self: *Self, event: ?EventTypeArg, new_state: StateType) StateError!void {
             if (!self.canTransitionTo(new_state)) {
                 return StateError.Invalid;
             }
 
             for (self.internal.transition_handlers) |handler| {
-                switch (handler.onTransition(handler, trigger, self.currentState(), new_state)) {
+                switch (handler.onTransition(handler, event, self.currentState(), new_state)) {
                     .Cancel => return StateError.Canceled,
                     .CancelNoError => return,
                     else => {},
@@ -274,13 +283,22 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             self.internal.current_state = new_state;
         }
 
-        /// Transition initiated by state or trigger
+        /// Sets the new current state without firing any registered handlers
+        /// Checking if the transition is valid is only done if `check_valid_transition` is true
+        pub fn transitionToSilently(self: *Self, new_state: StateType, check_valid_transition: bool) StateError!void {
+            if (check_valid_transition and !self.canTransitionTo(new_state)) {
+                return StateError.Invalid;
+            }
+            self.internal.current_state = new_state;
+        }
+
+        /// Transition initiated by state or event
         /// Returns `StateError.Invalid` if the transition is not allowed
-        pub fn apply(self: *Self, state_or_trigger: StateTriggerUnion) !void {
-            if (state_or_trigger == StateTriggerSelector.state) {
-                try self.transitionTo(state_or_trigger.state);
-            } else if (TriggerType) |_| {
-                _ = try self.activateTrigger(state_or_trigger.trigger);
+        pub fn apply(self: *Self, state_or_event: StateEventUnion) !void {
+            if (state_or_event == StateEventSelector.state) {
+                try self.transitionTo(state_or_event.state);
+            } else if (EventType) |_| {
+                _ = try self.do(state_or_event.event);
             }
         }
 
@@ -321,7 +339,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
             shape: []const u8 = "circle",
             shape_final_state: []const u8 = "doublecircle",
             fixed_shape_size: bool = false,
-            show_triggers: bool = true,
+            show_events: bool = true,
             show_initial_state: bool = false,
         };
 
@@ -357,14 +375,14 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
 
                 try writer.print("    \"{s}\" -> \"{s}\"", .{ @tagName(from), @tagName(to) });
 
-                if (TriggerType) |T| {
-                    if (options.show_triggers) {
-                        var triggers_start_offset = @intCast(usize, @enumToInt(from)) * trigger_type_count;
+                if (EventType) |T| {
+                    if (options.show_events) {
+                        var events_start_offset = @intCast(usize, @enumToInt(from)) * event_type_count;
                         var transition_name_buf: [4096]u8 = undefined;
                         var transition_name = std.io.fixedBufferStream(&transition_name_buf);
-                        var trigger_index: usize = 0;
-                        while (trigger_index < trigger_type_count) : (trigger_index += 1) {
-                            const slot_val = self.internal.triggers.get(triggers_start_offset + trigger_index);
+                        var event_index: usize = 0;
+                        while (event_index < event_type_count) : (event_index += 1) {
+                            const slot_val = self.internal.events.get(events_start_offset + event_index);
                             if (slot_val > 0 and (slot_val - 1) == @enumToInt(to)) {
                                 if ((try transition_name.getPos()) == 0) {
                                     try writer.print(" [label = \"", .{});
@@ -372,7 +390,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
                                 if ((try transition_name.getPos()) > 0) {
                                     try transition_name.writer().print(" || ", .{});
                                 }
-                                try transition_name.writer().print("{s}", .{@tagName(@intToEnum(T, trigger_index))});
+                                try transition_name.writer().print("{s}", .{@tagName(@intToEnum(T, event_index))});
                             }
                         }
                         if ((try transition_name.getPos()) > 0) {
@@ -400,10 +418,10 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
                 };
             }
 
-            pub fn onTransition(handler: *ImportFSM.Handler, trigger: ?ImportInput, from: ImportLineState, to: ImportLineState) HandlerResult {
+            pub fn onTransition(handler: *ImportFSM.Handler, event: ?ImportInput, from: ImportLineState, to: ImportLineState) HandlerResult {
                 const parse_handler = Interface.downcast(@This(), handler);
                 _ = from;
-                _ = trigger;
+                _ = event;
 
                 if (to == .startstate) {
                     const start_enum = std.meta.stringToEnum(StateType, parse_handler.current_identifer);
@@ -422,11 +440,11 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
                             if (e != StateError.AlreadyDefined) return HandlerResult.Cancel;
                         };
                     }
-                } else if (to == .trigger) {
-                    if (TriggerType != null) {
-                        const trigger_enum = std.meta.stringToEnum(TriggerType.?, parse_handler.current_identifer);
-                        if (trigger_enum) |te| {
-                            parse_handler.fsm.addTrigger(te, parse_handler.from.?, parse_handler.to.?) catch {
+                } else if (to == .event) {
+                    if (EventType != null) {
+                        const event_enum = std.meta.stringToEnum(EventType.?, parse_handler.current_identifer);
+                        if (event_enum) |te| {
+                            parse_handler.fsm.addEvent(te, parse_handler.from.?, parse_handler.to.?) catch {
                                 return HandlerResult.Cancel;
                             };
                         }
@@ -482,18 +500,18 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime TriggerType: ?ty
                     if (anyStringsEqual(&.{ "->", "[label", "]", "||" }, part)) {
                         continue;
                     } else if (std.mem.eql(u8, part, "start:")) {
-                        _ = try fsm.activateTrigger(.startcolon);
+                        _ = try fsm.do(.startcolon);
                     } else if (std.mem.eql(u8, part, "end:")) {
-                        _ = try fsm.activateTrigger(.endcolon);
+                        _ = try fsm.do(.endcolon);
                     } else {
                         parse_handler.current_identifer = part;
-                        _ = try fsm.activateTrigger(.identifier);
+                        _ = try fsm.do(.identifier);
                     }
                 }
-                _ = try fsm.activateTrigger(.newline);
+                _ = try fsm.do(.newline);
                 line_no += 1;
             }
-            _ = try fsm.activateTrigger(.newline);
+            _ = try fsm.do(.newline);
         }
     };
 }
@@ -521,7 +539,7 @@ pub fn FsmFromText(comptime input: []const u8) type {
         comptime var fsm = ImportFSM.init();
 
         var state_enum_fields: []const EnumField = &[_]EnumField{};
-        var trigger_enum_fields: []const EnumField = &[_]EnumField{};
+        var event_enum_fields: []const EnumField = &[_]EnumField{};
 
         var line_no: usize = 1;
         var lines = std.mem.split(u8, input, "\n");
@@ -533,12 +551,12 @@ pub fn FsmFromText(comptime input: []const u8) type {
                 if (anyStringsEqual(&.{ "->", "[label", "]", "||" }, part)) {
                     continue;
                 } else if (std.mem.eql(u8, part, "start:")) {
-                    _ = fsm.activateTrigger(.startcolon) catch unreachable;
+                    _ = fsm.do(.startcolon) catch unreachable;
                 } else if (std.mem.eql(u8, part, "end:")) {
-                    _ = fsm.activateTrigger(.endcolon) catch unreachable;
+                    _ = fsm.do(.endcolon) catch unreachable;
                 } else {
                     var current_identifier = part;
-                    _ = fsm.activateTrigger(.identifier) catch unreachable;
+                    _ = fsm.do(.identifier) catch unreachable;
                     const to = fsm.currentState();
 
                     if (to == .startstate or to == .endstates or to == .source or to == .target) {
@@ -556,24 +574,24 @@ pub fn FsmFromText(comptime input: []const u8) type {
                             .name = current_identifier,
                             .value = state_enum_fields.len,
                         }};
-                    } else if (to == .trigger) {
-                        inline for (trigger_enum_fields) |field| {
+                    } else if (to == .event) {
+                        inline for (event_enum_fields) |field| {
                             if (std.mem.eql(u8, field.name, current_identifier)) {
                                 continue :part_loop;
                             }
                         }
 
-                        trigger_enum_fields = trigger_enum_fields ++ &[_]EnumField{.{
+                        event_enum_fields = event_enum_fields ++ &[_]EnumField{.{
                             .name = current_identifier,
-                            .value = trigger_enum_fields.len,
+                            .value = event_enum_fields.len,
                         }};
                     }
                 }
             }
-            _ = fsm.activateTrigger(.newline) catch unreachable;
+            _ = fsm.do(.newline) catch unreachable;
             line_no += 1;
         }
-        _ = fsm.activateTrigger(.newline) catch unreachable;
+        _ = fsm.do(.newline) catch unreachable;
 
         const StateEnum = @Type(.{ .Enum = .{
             .layout = .Auto,
@@ -583,15 +601,15 @@ pub fn FsmFromText(comptime input: []const u8) type {
             .is_exhaustive = false,
         } });
 
-        const TriggerEnum = if (trigger_enum_fields.len > 0) @Type(.{ .Enum = .{
+        const EventEnum = if (event_enum_fields.len > 0) @Type(.{ .Enum = .{
             .layout = .Auto,
-            .fields = trigger_enum_fields,
-            .tag_type = std.math.IntFittingRange(0, trigger_enum_fields.len),
+            .fields = event_enum_fields,
+            .tag_type = std.math.IntFittingRange(0, event_enum_fields.len),
             .decls = &[_]std.builtin.Type.Declaration{},
             .is_exhaustive = false,
         } }) else null;
 
-        return StateMachine(StateEnum, TriggerEnum, @intToEnum(StateEnum, start_state_index));
+        return StateMachine(StateEnum, EventEnum, @intToEnum(StateEnum, start_state_index));
     }
 }
 
@@ -626,7 +644,7 @@ pub const Interface = struct {
     }
 };
 
-/// An enum generator useful for testing, as well as state machines with sequenced states or triggers.
+/// An enum generator useful for testing, as well as state machines with sequenced states or events.
 /// If `prefix` is an empty string, use @"0", @"1", etc to refer to the enum field.
 pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_count: usize) type {
     var fields: []const EnumField = &[_]EnumField{};
@@ -662,7 +680,7 @@ test "generate state enums" {
     try expectEqual(fsm.currentState(), .S1);
 }
 
-test "minimal without trigger" {
+test "minimal without event" {
     const State = enum { on, off };
     var fsm = StateMachine(State, null, .off).init();
     try fsm.addTransition(.on, .off);
@@ -672,7 +690,7 @@ test "minimal without trigger" {
     try expectEqual(fsm.currentState(), .on);
 }
 
-test "comptime minimal without trigger" {
+test "comptime minimal without event" {
     comptime {
         const State = enum { on, off };
         var fsm = StateMachine(State, null, .off).init();
@@ -684,39 +702,39 @@ test "comptime minimal without trigger" {
     }
 }
 
-test "minimal with trigger" {
+test "minimal with event" {
     const State = enum { on, off };
-    const Trigger = enum { click };
-    var fsm = StateMachine(State, Trigger, .off).init();
+    const Event = enum { click };
+    var fsm = StateMachine(State, Event, .off).init();
     try fsm.addTransition(.on, .off);
     try fsm.addTransition(.off, .on);
-    try fsm.addTrigger(.click, .on, .off);
-    try fsm.addTrigger(.click, .off, .on);
+    try fsm.addEvent(.click, .on, .off);
+    try fsm.addEvent(.click, .off, .on);
 
     // Transition manually
     try fsm.transitionTo(.on);
     try expectEqual(fsm.currentState(), .on);
 
-    // Transition through a trigger (event)
-    _ = try fsm.activateTrigger(.click);
+    // Transition through an event
+    _ = try fsm.do(.click);
     try expectEqual(fsm.currentState(), .off);
 }
 
-test "minimal with trigger defined using a table" {
+test "minimal with event defined using a table" {
     const State = enum { on, off };
-    const Trigger = enum { click };
-    const definition = [_]Transition(State, Trigger){
-        .{ .trigger = .click, .from = .on, .to = .off },
-        .{ .trigger = .click, .from = .off, .to = .on },
+    const Event = enum { click };
+    const definition = [_]Transition(State, Event){
+        .{ .event = .click, .from = .on, .to = .off },
+        .{ .event = .click, .from = .off, .to = .on },
     };
-    var fsm = StateMachineFromTable(State, Trigger, &definition, .off, &.{}).init();
+    var fsm = StateMachineFromTable(State, Event, &definition, .off, &.{}).init();
 
     // Transition manually
     try fsm.transitionTo(.on);
     try expectEqual(fsm.currentState(), .on);
 
-    // Transition through a trigger (event)
-    _ = try fsm.activateTrigger(.click);
+    // Transition through an event
+    _ = try fsm.do(.click);
     try expectEqual(fsm.currentState(), .off);
 }
 
@@ -743,7 +761,7 @@ test "check state" {
 // The main idea is that we classify incoming characters as InputEvent's. When a character arrives, we
 // simply trigger the event. If the input is well-formed, we automatically move to the appropriate state.
 // To actually extract CSV fields, we use a transition handler to keep track of where field slices starts and ends.
-// If the input is incorrect we have detailed information about where it happens, and why based on states and triggers.
+// If the input is incorrect we have detailed information about where it happens, and why based on states and events.
 test "csv parser" {
     const State = enum { field_start, unquoted, quoted, post_quoted, done };
     const InputEvent = enum { char, quote, whitespace, comma, newline, anything_not_quote, eof };
@@ -793,7 +811,7 @@ test "csv parser" {
             while (true) : (self.cur_index += 1) {
                 var input = reader.readByte() catch {
                     // An example of how to handle parsing errors
-                    _ = self.fsm.activateTrigger(.eof) catch {
+                    _ = self.fsm.do(.eof) catch {
                         try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
                     };
                     return;
@@ -801,24 +819,24 @@ test "csv parser" {
 
                 // The order of checks is important to classify input correctly
                 if (self.fsm.isCurrently(.quoted) and input != '"') {
-                    _ = try self.fsm.activateTrigger(.anything_not_quote);
+                    _ = try self.fsm.do(.anything_not_quote);
                 } else if (input == '\n') {
-                    _ = try self.fsm.activateTrigger(.newline);
+                    _ = try self.fsm.do(.newline);
                 } else if (std.ascii.isSpace(input)) {
-                    _ = try self.fsm.activateTrigger(.whitespace);
+                    _ = try self.fsm.do(.whitespace);
                 } else if (input == ',') {
-                    _ = try self.fsm.activateTrigger(.comma);
+                    _ = try self.fsm.do(.comma);
                 } else if (input == '"') {
-                    _ = try self.fsm.activateTrigger(.quote);
+                    _ = try self.fsm.do(.quote);
                 } else if (std.ascii.isPrint(input)) {
-                    _ = try self.fsm.activateTrigger(.char);
+                    _ = try self.fsm.do(.char);
                 }
             }
         }
 
         /// We use state transitions to extract CSV field slices, and we're not using any extra memory.
         /// Note that the transition handler must be public.
-        pub fn onTransition(handler: *FSM.Handler, trigger: ?InputEvent, from: State, to: State) HandlerResult {
+        pub fn onTransition(handler: *FSM.Handler, event: ?InputEvent, from: State, to: State) HandlerResult {
             const self = Interface.downcast(@This(), handler);
 
             const fields_per_row = 4;
@@ -837,11 +855,11 @@ test "csv parser" {
             }
 
             // Empty field
-            if (trigger.? == .comma and self.cur_field_start == self.cur_index) {
+            if (event.? == .comma and self.cur_field_start == self.cur_index) {
                 self.col = (self.col + 1) % fields_per_row;
             }
 
-            if (trigger.? == .newline) {
+            if (event.? == .newline) {
                 self.line += 1;
             }
 
@@ -850,21 +868,21 @@ test "csv parser" {
     };
 
     var fsm = FSM.init();
-    try fsm.addTriggerAndTransition(.whitespace, .field_start, .field_start);
-    try fsm.addTriggerAndTransition(.whitespace, .unquoted, .unquoted);
-    try fsm.addTriggerAndTransition(.whitespace, .post_quoted, .post_quoted);
-    try fsm.addTriggerAndTransition(.char, .field_start, .unquoted);
-    try fsm.addTriggerAndTransition(.char, .unquoted, .unquoted);
-    try fsm.addTriggerAndTransition(.quote, .field_start, .quoted);
-    try fsm.addTriggerAndTransition(.quote, .quoted, .post_quoted);
-    try fsm.addTriggerAndTransition(.anything_not_quote, .quoted, .quoted);
-    try fsm.addTriggerAndTransition(.comma, .post_quoted, .field_start);
-    try fsm.addTriggerAndTransition(.comma, .unquoted, .field_start);
-    try fsm.addTriggerAndTransition(.comma, .field_start, .field_start);
-    try fsm.addTriggerAndTransition(.newline, .post_quoted, .field_start);
-    try fsm.addTriggerAndTransition(.newline, .unquoted, .field_start);
-    try fsm.addTriggerAndTransition(.eof, .unquoted, .done);
-    try fsm.addTriggerAndTransition(.eof, .quoted, .done);
+    try fsm.addEventAndTransition(.whitespace, .field_start, .field_start);
+    try fsm.addEventAndTransition(.whitespace, .unquoted, .unquoted);
+    try fsm.addEventAndTransition(.whitespace, .post_quoted, .post_quoted);
+    try fsm.addEventAndTransition(.char, .field_start, .unquoted);
+    try fsm.addEventAndTransition(.char, .unquoted, .unquoted);
+    try fsm.addEventAndTransition(.quote, .field_start, .quoted);
+    try fsm.addEventAndTransition(.quote, .quoted, .post_quoted);
+    try fsm.addEventAndTransition(.anything_not_quote, .quoted, .quoted);
+    try fsm.addEventAndTransition(.comma, .post_quoted, .field_start);
+    try fsm.addEventAndTransition(.comma, .unquoted, .field_start);
+    try fsm.addEventAndTransition(.comma, .field_start, .field_start);
+    try fsm.addEventAndTransition(.newline, .post_quoted, .field_start);
+    try fsm.addEventAndTransition(.newline, .unquoted, .field_start);
+    try fsm.addEventAndTransition(.eof, .unquoted, .done);
+    try fsm.addEventAndTransition(.eof, .quoted, .done);
     try fsm.addFinalState(.done);
 
     try Parser.parse(&fsm, csv_input);
@@ -874,7 +892,7 @@ test "csv parser" {
     // try fsm.exportGraphviz("csv", std.io.getStdOut().writer(), .{.shape = "box", .shape_final_state = "doublecircle", .show_initial_state=true});
 }
 
-// An alternative to the "csv parser" test using activateTrigger(...) return values rather than transition callbacks
+// An alternative to the "csv parser" test using do(...) return values rather than transition callbacks
 test "csv parser, without handler callback" {
     const State = enum { field_start, unquoted, quoted, post_quoted, done };
     const InputEvent = enum { char, quote, whitespace, comma, newline, anything_not_quote, eof };
@@ -921,28 +939,28 @@ test "csv parser, without handler callback" {
             while (true) : (self.cur_index += 1) {
                 var input = reader.readByte() catch {
                     // An example of how to handle parsing errors
-                    _ = self.fsm.activateTrigger(.eof) catch {
+                    _ = self.fsm.do(.eof) catch {
                         try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
                     };
                     return;
                 };
 
-                // Holds from/to/trigger if a transition is triggered
+                // Holds from/to/event if a transition is triggered
                 var maybe_transition: ?Transition(State, InputEvent) = null;
 
                 // The order of checks is important to classify input correctly
                 if (self.fsm.isCurrently(.quoted) and input != '"') {
-                    maybe_transition = try self.fsm.activateTrigger(.anything_not_quote);
+                    maybe_transition = try self.fsm.do(.anything_not_quote);
                 } else if (input == '\n') {
-                    maybe_transition = try self.fsm.activateTrigger(.newline);
+                    maybe_transition = try self.fsm.do(.newline);
                 } else if (std.ascii.isSpace(input)) {
-                    maybe_transition = try self.fsm.activateTrigger(.whitespace);
+                    maybe_transition = try self.fsm.do(.whitespace);
                 } else if (input == ',') {
-                    maybe_transition = try self.fsm.activateTrigger(.comma);
+                    maybe_transition = try self.fsm.do(.comma);
                 } else if (input == '"') {
-                    maybe_transition = try self.fsm.activateTrigger(.quote);
+                    maybe_transition = try self.fsm.do(.quote);
                 } else if (std.ascii.isPrint(input)) {
-                    maybe_transition = try self.fsm.activateTrigger(.char);
+                    maybe_transition = try self.fsm.do(.char);
                 }
 
                 if (maybe_transition) |transition| {
@@ -962,11 +980,11 @@ test "csv parser, without handler callback" {
                     }
 
                     // Empty field
-                    if (transition.trigger.? == .comma and self.cur_field_start == self.cur_index) {
+                    if (transition.event.? == .comma and self.cur_field_start == self.cur_index) {
                         self.col = (self.col + 1) % fields_per_row;
                     }
 
-                    if (transition.trigger.? == .newline) {
+                    if (transition.event.? == .newline) {
                         self.line += 1;
                     }
                 }
@@ -975,21 +993,21 @@ test "csv parser, without handler callback" {
     };
 
     var fsm = FSM.init();
-    try fsm.addTriggerAndTransition(.whitespace, .field_start, .field_start);
-    try fsm.addTriggerAndTransition(.whitespace, .unquoted, .unquoted);
-    try fsm.addTriggerAndTransition(.whitespace, .post_quoted, .post_quoted);
-    try fsm.addTriggerAndTransition(.char, .field_start, .unquoted);
-    try fsm.addTriggerAndTransition(.char, .unquoted, .unquoted);
-    try fsm.addTriggerAndTransition(.quote, .field_start, .quoted);
-    try fsm.addTriggerAndTransition(.quote, .quoted, .post_quoted);
-    try fsm.addTriggerAndTransition(.anything_not_quote, .quoted, .quoted);
-    try fsm.addTriggerAndTransition(.comma, .post_quoted, .field_start);
-    try fsm.addTriggerAndTransition(.comma, .unquoted, .field_start);
-    try fsm.addTriggerAndTransition(.comma, .field_start, .field_start);
-    try fsm.addTriggerAndTransition(.newline, .post_quoted, .field_start);
-    try fsm.addTriggerAndTransition(.newline, .unquoted, .field_start);
-    try fsm.addTriggerAndTransition(.eof, .unquoted, .done);
-    try fsm.addTriggerAndTransition(.eof, .quoted, .done);
+    try fsm.addEventAndTransition(.whitespace, .field_start, .field_start);
+    try fsm.addEventAndTransition(.whitespace, .unquoted, .unquoted);
+    try fsm.addEventAndTransition(.whitespace, .post_quoted, .post_quoted);
+    try fsm.addEventAndTransition(.char, .field_start, .unquoted);
+    try fsm.addEventAndTransition(.char, .unquoted, .unquoted);
+    try fsm.addEventAndTransition(.quote, .field_start, .quoted);
+    try fsm.addEventAndTransition(.quote, .quoted, .post_quoted);
+    try fsm.addEventAndTransition(.anything_not_quote, .quoted, .quoted);
+    try fsm.addEventAndTransition(.comma, .post_quoted, .field_start);
+    try fsm.addEventAndTransition(.comma, .unquoted, .field_start);
+    try fsm.addEventAndTransition(.comma, .field_start, .field_start);
+    try fsm.addEventAndTransition(.newline, .post_quoted, .field_start);
+    try fsm.addEventAndTransition(.newline, .unquoted, .field_start);
+    try fsm.addEventAndTransition(.eof, .unquoted, .done);
+    try fsm.addEventAndTransition(.eof, .quoted, .done);
     try fsm.addFinalState(.done);
 
     try Parser.parse(&fsm, csv_input);
@@ -1001,28 +1019,28 @@ test "csv parser, without handler callback" {
 
 // Demonstrates that triggering a single "click" event can perpetually cycle through intensity states.
 test "moore machine: three-level intensity light" {
-    // Here we use anonymous state/trigger enums, Zig will still allow us to reference these
+    // Here we use anonymous state/event enums, Zig will still allow us to reference these
     var fsm = StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
 
-    try fsm.addTriggerAndTransition(.click, .off, .dim);
-    try fsm.addTriggerAndTransition(.click, .dim, .medium);
-    try fsm.addTriggerAndTransition(.click, .medium, .bright);
-    try fsm.addTriggerAndTransition(.click, .bright, .off);
+    try fsm.addEventAndTransition(.click, .off, .dim);
+    try fsm.addEventAndTransition(.click, .dim, .medium);
+    try fsm.addEventAndTransition(.click, .medium, .bright);
+    try fsm.addEventAndTransition(.click, .bright, .off);
 
-    // Trigger a full cycle of off -> dim -> medium -> bright -> off
+    // Event a full cycle of off -> dim -> medium -> bright -> off
 
     try expect(fsm.isCurrently(.off));
 
-    _ = try fsm.activateTrigger(.click);
+    _ = try fsm.do(.click);
     try expect(fsm.isCurrently(.dim));
 
-    _ = try fsm.activateTrigger(.click);
+    _ = try fsm.do(.click);
     try expect(fsm.isCurrently(.medium));
 
-    _ = try fsm.activateTrigger(.click);
+    _ = try fsm.do(.click);
     try expect(fsm.isCurrently(.bright));
 
-    _ = try fsm.activateTrigger(.click);
+    _ = try fsm.do(.click);
     try expect(fsm.isCurrently(.off));
 
     try expect(fsm.canTransitionTo(.dim));
@@ -1036,13 +1054,13 @@ test "moore machine: three-level intensity light" {
 
 test "handler that cancels" {
     const State = enum { on, off };
-    const Trigger = enum { click };
-    const FSM = StateMachine(State, Trigger, .off);
+    const Event = enum { click };
+    const FSM = StateMachine(State, Event, .off);
     var fsm = FSM.init();
 
     // Demonstrates how to manage extra state (in this case a simple counter) while reacting
     // to transitions. Once the counter reaches 3, it cancels any further transitions. Real-world
-    // handlers typically check from/to states and perhaps even which trigger (if any) caused the
+    // handlers typically check from/to states and perhaps even which event (if any) caused the
     // transition.
     const CountingHandler = struct {
         handler: FSM.Handler,
@@ -1055,8 +1073,8 @@ test "handler that cancels" {
             };
         }
 
-        pub fn onTransition(handler: *FSM.Handler, trigger: ?Trigger, from: State, to: State) HandlerResult {
-            _ = &.{ from, to, trigger };
+        pub fn onTransition(handler: *FSM.Handler, event: ?Event, from: State, to: State) HandlerResult {
+            _ = &.{ from, to, event };
             const self = Interface.downcast(@This(), handler);
             self.counter += 1;
             return if (self.counter < 3) HandlerResult.Continue else HandlerResult.Cancel;
@@ -1065,14 +1083,14 @@ test "handler that cancels" {
 
     var countingHandler = CountingHandler.init();
     fsm.setTransitionHandlers(&.{&countingHandler.handler});
-    try fsm.addTriggerAndTransition(.click, .on, .off);
-    try fsm.addTriggerAndTransition(.click, .off, .on);
+    try fsm.addEventAndTransition(.click, .on, .off);
+    try fsm.addEventAndTransition(.click, .off, .on);
 
-    _ = try fsm.activateTrigger(.click);
-    _ = try fsm.activateTrigger(.click);
+    _ = try fsm.do(.click);
+    _ = try fsm.do(.click);
 
     // Third time will fail
-    try expectError(StateError.Canceled, fsm.activateTrigger(.click));
+    try expectError(StateError.Canceled, fsm.do(.click));
 }
 
 test "Generate state machine enums from graphviz input" {}
@@ -1100,12 +1118,12 @@ test "comptime dfa: binary alphabet, require even number of zeros in input" {
 
         // With valid input, we wil end up in the final state
         const valid_input: []const Bit = &.{ .@"0", .@"0", .@"1", .@"1" };
-        for (valid_input) |bit| _ = try fsm.activateTrigger(bit);
+        for (valid_input) |bit| _ = try fsm.do(bit);
         try expect(fsm.isInFinalState());
 
         // With invalid input, we will not end up in the final state
         const invalid_input: []const Bit = &.{ .@"0", .@"0", .@"0", .@"1" };
-        for (invalid_input) |bit| _ = try fsm.activateTrigger(bit);
+        for (invalid_input) |bit| _ = try fsm.do(bit);
         try expect(!fsm.isInFinalState());
     }
 }
@@ -1138,17 +1156,17 @@ test "import: graphviz" {
     defer outbuf.deinit();
 
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8" };
-    const Trigger = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
+    const Event = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
 
-    var fsm = StateMachine(State, Trigger, .@"0").init();
+    var fsm = StateMachine(State, Event, .@"0").init();
     try fsm.importText(input);
 
-    try fsm.apply(.{ .trigger = .@"SS(B)" });
+    try fsm.apply(.{ .event = .@"SS(B)" });
     try expectEqual(fsm.currentState(), .@"2");
     try fsm.transitionTo(.@"6");
     try expectEqual(fsm.currentState(), .@"6");
     // Self-transition
-    _ = try fsm.activateTrigger(.@"S(b)");
+    _ = try fsm.do(.@"S(b)");
     try expectEqual(fsm.currentState(), .@"6");
 }
 
@@ -1169,15 +1187,15 @@ test "import: libfsm text" {
     defer outbuf.deinit();
 
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5" };
-    const Trigger = enum { a, b, c };
+    const Event = enum { a, b, c };
 
-    var fsm = StateMachine(State, Trigger, .@"0").init();
+    var fsm = StateMachine(State, Event, .@"0").init();
     try fsm.importText(input);
 
     try expectEqual(fsm.currentState(), .@"1");
     try fsm.transitionTo(.@"2");
     try expectEqual(fsm.currentState(), .@"2");
-    _ = try fsm.activateTrigger(.a);
+    _ = try fsm.do(.a);
     try expectEqual(fsm.currentState(), .@"3");
     try expect(fsm.isInFinalState());
 }
@@ -1185,9 +1203,9 @@ test "import: libfsm text" {
 // Implements the state diagram example from the Graphviz docs
 test "export: graphviz export of finite automaton sample" {
     const State = enum { @"0", @"1", @"2", @"3", @"4", @"5", @"6", @"7", @"8" };
-    const Trigger = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
+    const Event = enum { @"SS(B)", @"SS(S)", @"S($end)", @"SS(b)", @"SS(a)", @"S(A)", @"S(b)", @"S(a)", extra };
 
-    var fsm = StateMachine(State, Trigger, .@"0").init();
+    var fsm = StateMachine(State, Event, .@"0").init();
     try fsm.addTransition(State.@"0", State.@"2");
     try fsm.addTransition(State.@"0", State.@"1");
     try fsm.addTransition(State.@"1", State.@"3");
@@ -1207,22 +1225,22 @@ test "export: graphviz export of finite automaton sample" {
     try fsm.addFinalState(State.@"4");
     try fsm.addFinalState(State.@"8");
 
-    try fsm.addTrigger(.@"SS(B)", .@"0", .@"2");
-    try fsm.addTrigger(.@"SS(S)", .@"0", .@"1");
-    try fsm.addTrigger(.@"S($end)", .@"1", .@"3");
-    try fsm.addTrigger(.@"SS(b)", .@"2", .@"6");
-    try fsm.addTrigger(.@"SS(a)", .@"2", .@"5");
-    try fsm.addTrigger(.@"S(A)", .@"2", .@"4");
-    try fsm.addTrigger(.@"S(b)", .@"5", .@"7");
-    try fsm.addTrigger(.@"S(a)", .@"5", .@"5");
-    try fsm.addTrigger(.@"S(b)", .@"6", .@"6");
-    try fsm.addTrigger(.@"S(a)", .@"6", .@"5");
-    try fsm.addTrigger(.@"S(b)", .@"7", .@"8");
-    try fsm.addTrigger(.@"S(a)", .@"7", .@"5");
-    try fsm.addTrigger(.@"S(b)", .@"8", .@"6");
-    try fsm.addTrigger(.@"S(a)", .@"8", .@"5");
-    // This demonstrates that multiple triggers on the same transition are concatenated with ||
-    try fsm.addTrigger(.extra, .@"8", .@"5");
+    try fsm.addEvent(.@"SS(B)", .@"0", .@"2");
+    try fsm.addEvent(.@"SS(S)", .@"0", .@"1");
+    try fsm.addEvent(.@"S($end)", .@"1", .@"3");
+    try fsm.addEvent(.@"SS(b)", .@"2", .@"6");
+    try fsm.addEvent(.@"SS(a)", .@"2", .@"5");
+    try fsm.addEvent(.@"S(A)", .@"2", .@"4");
+    try fsm.addEvent(.@"S(b)", .@"5", .@"7");
+    try fsm.addEvent(.@"S(a)", .@"5", .@"5");
+    try fsm.addEvent(.@"S(b)", .@"6", .@"6");
+    try fsm.addEvent(.@"S(a)", .@"6", .@"5");
+    try fsm.addEvent(.@"S(b)", .@"7", .@"8");
+    try fsm.addEvent(.@"S(a)", .@"7", .@"5");
+    try fsm.addEvent(.@"S(b)", .@"8", .@"6");
+    try fsm.addEvent(.@"S(a)", .@"8", .@"5");
+    // This demonstrates that multiple events on the same transition are concatenated with ||
+    try fsm.addEvent(.extra, .@"8", .@"5");
 
     var outbuf = std.ArrayList(u8).init(std.testing.allocator);
     defer outbuf.deinit();
@@ -1277,29 +1295,29 @@ test "finite state automaton for accepting a 25p car park charge (from Computers
     try fsm.importText(state_machine);
 
     // Add 5p, 10p and 10p coins
-    _ = try fsm.activateTrigger(.p5);
-    _ = try fsm.activateTrigger(.p10);
-    _ = try fsm.activateTrigger(.p10);
+    _ = try fsm.do(.p5);
+    _ = try fsm.do(.p10);
+    _ = try fsm.do(.p10);
 
     // Car park charge reached
     try expect(fsm.isInFinalState());
 
     // Verify that we're unable to accept more coins
-    try expectError(StateError.Invalid, fsm.activateTrigger(.p10));
+    try expectError(StateError.Invalid, fsm.do(.p10));
 
     // Restart the state machine and try a different combination to reach 25p
     fsm.restart();
-    _ = try fsm.activateTrigger(.p20);
-    _ = try fsm.activateTrigger(.p5);
+    _ = try fsm.do(.p20);
+    _ = try fsm.do(.p5);
     try expect(fsm.isInFinalState());
 
     // Same as restart(), but makes sure we're currently in the start state or a final state
     try fsm.safeRestart();
-    _ = try fsm.activateTrigger(.p10);
+    _ = try fsm.do(.p10);
     try expectError(StateError.Invalid, fsm.safeRestart());
-    _ = try fsm.activateTrigger(.p5);
-    _ = try fsm.activateTrigger(.p5);
-    _ = try fsm.activateTrigger(.p5);
+    _ = try fsm.do(.p5);
+    _ = try fsm.do(.p5);
+    _ = try fsm.do(.p5);
     try expect(fsm.isInFinalState());
 }
 
@@ -1332,7 +1350,7 @@ test "iterate next valid states" {
     try expectEqual(next_valid_iterator.next(), null);
 }
 
-// You don't actually need to define the state and trigger enums manually, but
+// You don't actually need to define the state and event enums manually, but
 // rather generate them at compile-time from a string or embedded text file.
 //
 // A downside is that editors are unlikely to autocomplete generated types
@@ -1355,7 +1373,7 @@ test "iterate next valid states, using state machine with generated enums" {
 
     var fsm = try generateStateMachineFromText(state_machine);
     const State = @TypeOf(fsm).StateEnum;
-    _ = @TypeOf(fsm).TriggerEnum;
+    _ = @TypeOf(fsm).EventEnum;
 
     var next_valid_iterator = fsm.validNextStatesIterator();
     try expectEqual(State.sum5, next_valid_iterator.next().?);
@@ -1388,10 +1406,10 @@ test "elevator: redefine transition should fail" {
 
 test "elevator: apply" {
     var fsm = try ElevatorTest.init();
-    try fsm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
+    try fsm.addEvent(.alarm, .doors_opened, .exit_light_blinking);
     try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_closed });
     try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_opened });
-    try fsm.apply(.{ .trigger = ElevatorTest.ElevatorActions.alarm });
+    try fsm.apply(.{ .event = ElevatorTest.ElevatorActions.alarm });
     try expect(fsm.isCurrently(.exit_light_blinking));
 }
 
@@ -1401,14 +1419,14 @@ test "elevator: transition success" {
     try expectEqual(fsm.currentState(), .doors_closed);
 }
 
-test "elevator: add a trigger and active it" {
+test "elevator: add an event and active it" {
     var fsm = try ElevatorTest.init();
 
-    // The same trigger can be invoked for multiple state transitions
-    try fsm.addTrigger(.alarm, .doors_opened, .exit_light_blinking);
+    // The same event can be invoked for multiple state transitions
+    try fsm.addEvent(.alarm, .doors_opened, .exit_light_blinking);
     try expectEqual(fsm.currentState(), .doors_opened);
 
-    _ = try fsm.activateTrigger(.alarm);
+    _ = try fsm.do(.alarm);
     try expectEqual(fsm.currentState(), .exit_light_blinking);
 }
 
@@ -1417,12 +1435,12 @@ test "statemachine from transition array" {
     const Events = enum { open, close, alarm, notused1, notused2 };
 
     const defs = [_]Transition(Elevator, Events){
-        .{ .trigger = .open, .from = .doors_closed, .to = .doors_opened },
-        .{ .trigger = .open, .from = .doors_opened, .to = .doors_opened },
-        .{ .trigger = .close, .from = .doors_opened, .to = .doors_closed },
-        .{ .trigger = .close, .from = .doors_closed, .to = .doors_closed },
-        .{ .trigger = .alarm, .from = .doors_closed, .to = .doors_opened },
-        .{ .trigger = .alarm, .from = .doors_opened, .to = .exit_light_blinking },
+        .{ .event = .open, .from = .doors_closed, .to = .doors_opened },
+        .{ .event = .open, .from = .doors_opened, .to = .doors_opened },
+        .{ .event = .close, .from = .doors_opened, .to = .doors_closed },
+        .{ .event = .close, .from = .doors_closed, .to = .doors_closed },
+        .{ .event = .alarm, .from = .doors_closed, .to = .doors_opened },
+        .{ .event = .alarm, .from = .doors_opened, .to = .exit_light_blinking },
         .{ .from = .doors_closed, .to = .moving },
         .{ .from = .moving, .to = .moving },
         .{ .from = .moving, .to = .doors_closed },
@@ -1441,4 +1459,8 @@ test "statemachine from transition array" {
         if (fsm.canTransitionTo(.moving)) try fsm.transitionTo(.moving);
         try fsm.transitionTo(.doors_closed);
     }
+}
+
+test {
+    std.testing.refAllDecls(@This());
 }
