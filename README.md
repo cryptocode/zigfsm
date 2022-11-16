@@ -30,7 +30,7 @@ This library tracks [Zig master](https://github.com/ziglang/zig) and is tested w
 * State machines can export themselves to the Graphviz DOT format
 * Defined programmatically or by importing Graphviz or libfsm text
 * Imported state machines can autogenerate state- and event enums at compile time
-* Listeners can add functionality and conditionally cancel transitions
+* Optional event listeners can add functionality and cancel transitions
 * Comprehensive test coverage which also serves as examples
 
 ## Motivation
