@@ -309,7 +309,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 
             /// Next valid state, or null if no more valid states are available
             pub fn next(self: *@This()) ?StateEnum {
-                inline for (std.meta.fields(StateType)) |field, i| {
+                inline for (std.meta.fields(StateType), 0..) |field, i| {
                     if (i == self.index) {
                         self.index += 1;
                         if (self.fsm.canTransitionTo(@intToEnum(StateType, field.value))) {
@@ -521,7 +521,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 ///
 /// You can combine this with @embedFile to generate a state machine at
 /// compile time from an external text file.
-pub fn generateStateMachineFromText(comptime input: []const u8) !FsmFromText(input) {
+pub fn instanceFromText(comptime input: []const u8) !FsmFromText(input) {
     const FSM = FsmFromText(input);
     var fsm = FSM.init();
     try fsm.importText(input);
@@ -594,7 +594,6 @@ pub fn FsmFromText(comptime input: []const u8) type {
         _ = fsm.do(.newline) catch unreachable;
 
         const StateEnum = @Type(.{ .Enum = .{
-            .layout = .Auto,
             .fields = state_enum_fields,
             .tag_type = std.math.IntFittingRange(0, state_enum_fields.len),
             .decls = &[_]std.builtin.Type.Declaration{},
@@ -602,7 +601,6 @@ pub fn FsmFromText(comptime input: []const u8) type {
         } });
 
         const EventEnum = if (event_enum_fields.len > 0) @Type(.{ .Enum = .{
-            .layout = .Auto,
             .fields = event_enum_fields,
             .tag_type = std.math.IntFittingRange(0, event_enum_fields.len),
             .decls = &[_]std.builtin.Type.Declaration{},
@@ -659,7 +657,6 @@ pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_cou
         }};
     }
     return @Type(.{ .Enum = .{
-        .layout = .Auto,
         .fields = fields,
         .tag_type = std.math.IntFittingRange(0, element_count),
         .decls = &[_]std.builtin.Type.Declaration{},
@@ -822,7 +819,7 @@ test "csv parser" {
                     _ = try self.fsm.do(.anything_not_quote);
                 } else if (input == '\n') {
                     _ = try self.fsm.do(.newline);
-                } else if (std.ascii.isSpace(input)) {
+                } else if (std.ascii.isWhitespace(input)) {
                     _ = try self.fsm.do(.whitespace);
                 } else if (input == ',') {
                     _ = try self.fsm.do(.comma);
@@ -953,7 +950,7 @@ test "csv parser, without handler callback" {
                     maybe_transition = try self.fsm.do(.anything_not_quote);
                 } else if (input == '\n') {
                     maybe_transition = try self.fsm.do(.newline);
-                } else if (std.ascii.isSpace(input)) {
+                } else if (std.ascii.isWhitespace(input)) {
                     maybe_transition = try self.fsm.do(.whitespace);
                 } else if (input == ',') {
                     maybe_transition = try self.fsm.do(.comma);
@@ -1369,7 +1366,7 @@ test "iterate next valid states, using state machine with generated enums" {
         \\ end: sum25
     ;
 
-    var fsm = try generateStateMachineFromText(state_machine);
+    var fsm = try instanceFromText(state_machine);
     const State = @TypeOf(fsm).StateEnum;
     _ = @TypeOf(fsm).EventEnum;
 

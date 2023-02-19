@@ -1,22 +1,31 @@
 const std = @import("std");
 
 pub fn build(b: *std.build.Builder) void {
-    const mode = b.standardReleaseOptions();
+    const target = b.standardTargetOptions(.{});
+    const mode = b.standardOptimizeOption(.{});
 
-    const lib = b.addStaticLibrary("zigfsm", "src/main.zig");
-    lib.setBuildMode(mode);
+    const lib = b.addStaticLibrary(.{
+        .name = "zigfsm",
+        .root_source_file = .{
+            .path = "src/main.zig",
+        },
+        .target = target,
+        .optimize = mode,
+    });
+
     lib.install();
 
-    const main_tests = b.addTest("src/main.zig");
-    main_tests.setBuildMode(mode);
+    const main_tests = b.addTest(.{ .name = "tests", .root_source_file = .{ .path = "src/main.zig" } });
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
 
-    const benchmark = b.addExecutable("benchmark", "src/benchmark.zig");
-    const target = b.standardTargetOptions(.{});
-    benchmark.setTarget(target);
-    benchmark.setBuildMode(std.builtin.Mode.ReleaseFast);
+    const benchmark = b.addExecutable(.{
+        .name = "benchmark",
+        .root_source_file = .{ .path = "src/benchmark.zig" },
+        .optimize = std.builtin.Mode.ReleaseFast,
+    });
+
     benchmark.install();
 
     const run_benchmark_cmd = benchmark.run();
