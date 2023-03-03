@@ -380,8 +380,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
                         var events_start_offset = @intCast(usize, @enumToInt(from)) * event_type_count;
                         var transition_name_buf: [4096]u8 = undefined;
                         var transition_name = std.io.fixedBufferStream(&transition_name_buf);
-                        var event_index: usize = 0;
-                        while (event_index < event_type_count) : (event_index += 1) {
+                        for (0..event_type_count) |event_index| {
                             const slot_val = self.internal.events.get(events_start_offset + event_index);
                             if (slot_val > 0 and (slot_val - 1) == @enumToInt(to)) {
                                 if ((try transition_name.getPos()) == 0) {
@@ -647,8 +646,7 @@ pub const Interface = struct {
 pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_count: usize) type {
     var fields: []const EnumField = &[_]EnumField{};
 
-    var i: usize = 0;
-    while (i < element_count) : (i += 1) {
+    for (0..element_count) |i| {
         comptime var tmp_buf: [128]u8 = undefined;
         const field_name = comptime try std.fmt.bufPrint(&tmp_buf, "{s}{d}", .{ prefix, i });
         fields = fields ++ &[_]EnumField{.{
