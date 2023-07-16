@@ -13,7 +13,7 @@ pub fn build(b: *std.build.Builder) void {
         .optimize = mode,
     });
 
-    lib.install();
+    b.installArtifact(lib);
 
     const main_tests = b.addTest(.{ .name = "tests", .root_source_file = .{ .path = "src/main.zig" } });
 
@@ -26,11 +26,10 @@ pub fn build(b: *std.build.Builder) void {
         .optimize = std.builtin.Mode.ReleaseFast,
     });
 
-    benchmark.install();
+    b.installArtifact(benchmark);
 
-    const run_benchmark_cmd = benchmark.run();
-    run_benchmark_cmd.step.dependOn(b.getInstallStep());
-
-    const benchmark_step = b.step("benchmark", "Build library benchmarks");
-    benchmark_step.dependOn(&run_benchmark_cmd.step);
+    const run_cmd = b.addRunArtifact(benchmark);
+    run_cmd.step.dependOn(b.getInstallStep());
+    const run_step = b.step("benchmark", "Run the benchmark");
+    run_step.dependOn(&run_cmd.step);
 }

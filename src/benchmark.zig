@@ -39,8 +39,8 @@ pub fn main() !void {
     std.mem.doNotOptimizeAway(&iterations);
     const end = timer.read();
 
-    const elapsed_microsec = @intToFloat(f64, end - start) / 1000;
-    const rate = @as(f64, changes_per_iteration) * @intToFloat(f64, iterations) / elapsed_microsec;
+    const elapsed_microsec = @as(f64, @floatFromInt(end - start)) / 1000;
+    const rate = @as(f64, changes_per_iteration) * @as(f64, @floatFromInt(iterations)) / elapsed_microsec;
 
     try std.io.getStdOut().writer().print("{d:.2} transitions per µs ({d:.2} nanoseconds on avg. per transition)\n", .{ rate, 1000 / rate });
 }

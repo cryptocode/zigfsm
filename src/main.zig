@@ -84,8 +84,8 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
     // Events are organized into a packed 2D array. Indexing by state and event yields the next state (where 0 means no transition)
     // Add 1 to bit_count because zero is used to indicates absence of transition (no target state defined for a source state/event combination)
     // Cell values must thus be adjusted accordingly when added or queried.
-    const CellType = std.meta.Int(.unsigned, std.math.max(state_enum_bits, event_enum_bits) + 1);
-    const EventPackedIntArray = if (EventType != null) std.PackedIntArray(CellType, state_type_count * std.math.max(event_type_count, 1)) else void;
+    const CellType = std.meta.Int(.unsigned, @as(u16, @max(state_enum_bits, event_enum_bits)) + 1);
+    const EventPackedIntArray = if (EventType != null) std.PackedIntArray(CellType, state_type_count * @max(event_type_count, 1)) else void;
 
     return struct {
         internal: struct {
@@ -118,19 +118,19 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
             if (comptime EventType != null) instance.internal.events = EventPackedIntArray.initAllTo(0);
 
             for (transitions) |t| {
-                var offset = (@enumToInt(t.from) * state_type_count) + @enumToInt(t.to);
+                var offset = (@intFromEnum(t.from) * state_type_count) + @intFromEnum(t.to);
                 instance.internal.state_map.setValue(offset, true);
 
                 if (comptime EventType != null) {
                     if (t.event) |event| {
                         const slot = computeEventSlot(event, t.from);
-                        instance.internal.events.set(slot, @enumToInt(t.to) + @as(CellType, 1));
+                        instance.internal.events.set(slot, @intFromEnum(t.to) + @as(CellType, 1));
                     }
                 }
             }
 
             for (final_states) |f| {
-                instance.internal.final_states.setValue(@enumToInt(f), true);
+                instance.internal.final_states.setValue(@intFromEnum(f), true);
             }
 
             return instance;
@@ -178,17 +178,17 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
         /// Returns `StateError.Invalid` if the final state is already added.
         pub fn addFinalState(self: *Self, final_state: StateType) !void {
             if (self.isFinalState(final_state)) return StateError.Invalid;
-            self.internal.final_states.setValue(@enumToInt(final_state), true);
+            self.internal.final_states.setValue(@intFromEnum(final_state), true);
         }
 
         /// Returns true if the state machine is in a final state
         pub fn isInFinalState(self: *Self) bool {
-            return self.internal.final_states.isSet(@enumToInt(self.currentState()));
+            return self.internal.final_states.isSet(@intFromEnum(self.currentState()));
         }
 
         /// Returns true if the argument is a final state
         pub fn isFinalState(self: *Self, state: StateType) bool {
-            return self.internal.final_states.isSet(@enumToInt(state));
+            return self.internal.final_states.isSet(@intFromEnum(state));
         }
 
         /// Invoke all `handlers` when a state transition happens
@@ -210,7 +210,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
                 if (self.canTransitionFromTo(from, to)) {
                     var slot = computeEventSlot(event, from);
                     if (self.internal.events.get(slot) != 0) return StateError.AlreadyDefined;
-                    self.internal.events.set(slot, @intCast(CellType, @enumToInt(to)) + 1);
+                    self.internal.events.set(slot, @as(CellType, @intCast(@intFromEnum(to))) + 1);
                 } else return StateError.Invalid;
             }
         }
@@ -223,8 +223,8 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
                 var slot = computeEventSlot(event, self.internal.current_state);
                 var to_state = self.internal.events.get(slot);
                 if (to_state != 0) {
-                    try self.transitionToInternal(event, @intToEnum(StateType, to_state - 1));
-                    return .{ .event = event, .from = from_state, .to = @intToEnum(StateType, to_state - 1) };
+                    try self.transitionToInternal(event, @as(StateType, @enumFromInt(to_state - 1)));
+                    return .{ .event = event, .from = from_state, .to = @as(StateType, @enumFromInt(to_state - 1)) };
                 } else {
                     return StateError.Invalid;
                 }
@@ -233,13 +233,13 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 
         /// Given an event and a from-state (usually the current state), return the slot index for the to-state
         fn computeEventSlot(event: EventTypeArg, from: StateType) usize {
-            return @intCast(usize, @enumToInt(from)) * event_type_count + @enumToInt(event);
+            return @as(usize, @intCast(@intFromEnum(from))) * event_type_count + @intFromEnum(event);
         }
 
         /// Add a valid state transition
         /// Returns `StateError.AlreadyDefined` if the transition is already defined
         pub fn addTransition(self: *Self, from: StateType, to: StateType) !void {
-            const offset: usize = (@intCast(usize, @enumToInt(from)) * state_type_count) + @enumToInt(to);
+            const offset: usize = (@as(usize, @intCast(@intFromEnum(from))) * state_type_count) + @intFromEnum(to);
             if (self.internal.state_map.isSet(offset)) return StateError.AlreadyDefined;
             self.internal.state_map.setValue(offset, true);
         }
@@ -251,13 +251,13 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 
         /// Returns true if the transition is possible
         pub fn canTransitionTo(self: *Self, new_state: StateType) bool {
-            const offset: usize = (@intCast(usize, @enumToInt(self.currentState())) * state_type_count) + @enumToInt(new_state);
+            const offset: usize = (@as(usize, @intCast(@intFromEnum(self.currentState()))) * state_type_count) + @intFromEnum(new_state);
             return self.internal.state_map.isSet(offset);
         }
 
         /// Returns true if the transition `from` -> `to` is possible
         pub fn canTransitionFromTo(self: *Self, from: StateType, to: StateType) bool {
-            const offset: usize = (@intCast(usize, @enumToInt(from)) * state_type_count) + @enumToInt(to);
+            const offset: usize = (@as(usize, @intCast(@intFromEnum(from))) * state_type_count) + @intFromEnum(to);
             return self.internal.state_map.isSet(offset);
         }
 
@@ -312,8 +312,8 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
                 inline for (std.meta.fields(StateType), 0..) |field, i| {
                     if (i == self.index) {
                         self.index += 1;
-                        if (self.fsm.canTransitionTo(@intToEnum(StateType, field.value))) {
-                            return @intToEnum(StateType, field.value);
+                        if (self.fsm.canTransitionTo(@as(StateType, @enumFromInt(field.value)))) {
+                            return @as(StateType, @enumFromInt(field.value));
                         }
                     }
                 }
@@ -355,7 +355,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
                 try writer.print("    node [shape = {s} fixedsize = {}];", .{ options.shape_final_state, options.fixed_shape_size });
                 var final_it = self.internal.final_states.iterator(.{ .kind = .set, .direction = .forward });
                 while (final_it.next()) |index| {
-                    try writer.print(" \"{s}\" ", .{@tagName(@intToEnum(StateType, index))});
+                    try writer.print(" \"{s}\" ", .{@tagName(@as(StateType, @enumFromInt(index)))});
                 }
 
                 try writer.print(";\n", .{});
@@ -370,26 +370,26 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 
             var it = self.internal.state_map.iterator(.{ .kind = .set, .direction = .forward });
             while (it.next()) |index| {
-                const from = @intToEnum(StateType, index / state_type_count);
-                const to = @intToEnum(StateType, index % state_type_count);
+                const from = @as(StateType, @enumFromInt(index / state_type_count));
+                const to = @as(StateType, @enumFromInt(index % state_type_count));
 
                 try writer.print("    \"{s}\" -> \"{s}\"", .{ @tagName(from), @tagName(to) });
 
                 if (EventType) |T| {
                     if (options.show_events) {
-                        var events_start_offset = @intCast(usize, @enumToInt(from)) * event_type_count;
+                        var events_start_offset = @as(usize, @intCast(@intFromEnum(from))) * event_type_count;
                         var transition_name_buf: [4096]u8 = undefined;
                         var transition_name = std.io.fixedBufferStream(&transition_name_buf);
                         for (0..event_type_count) |event_index| {
                             const slot_val = self.internal.events.get(events_start_offset + event_index);
-                            if (slot_val > 0 and (slot_val - 1) == @enumToInt(to)) {
+                            if (slot_val > 0 and (slot_val - 1) == @intFromEnum(to)) {
                                 if ((try transition_name.getPos()) == 0) {
                                     try writer.print(" [label = \"", .{});
                                 }
                                 if ((try transition_name.getPos()) > 0) {
                                     try transition_name.writer().print(" || ", .{});
                                 }
-                                try transition_name.writer().print("{s}", .{@tagName(@intToEnum(T, event_index))});
+                                try transition_name.writer().print("{s}", .{@tagName(@as(T, @enumFromInt(event_index)))});
                             }
                         }
                         if ((try transition_name.getPos()) > 0) {
@@ -606,7 +606,7 @@ pub fn FsmFromText(comptime input: []const u8) type {
             .is_exhaustive = false,
         } }) else null;
 
-        return StateMachine(StateEnum, EventEnum, @intToEnum(StateEnum, start_state_index));
+        return StateMachine(StateEnum, EventEnum, @as(StateEnum, @enumFromInt(start_state_index)));
     }
 }
 
