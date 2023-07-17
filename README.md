@@ -68,7 +68,7 @@ The benchmark always runs under release-fast.
 Add zigfsm as a [Zig package](https://ziglearn.org/chapter-3) in your build file, or simply import it directly after vendoring/adding a submodule:
 
 ```zig
-const fsm = @import("zigfsm/main.zig");
+const zigfsm = @import("zigfsm/main.zig");
 ```
 
 ### Creating a state machine type
@@ -80,13 +80,13 @@ Here we create an FSM for a button that can be clicked to flip between on and of
 ```zig
 const State = enum { on, off };
 const Event = enum { click };
-const FSM = fsm.StateMachine(State, Event, .off);
+const FSM = zigfsm.StateMachine(State, Event, .off);
 ```
 
 If you don't need events, simply pass null:
 
 ```zig
-const FSM = fsm.StateMachine(State, null, .off);
+const FSM = zigfsm.StateMachine(State, null, .off);
 ```
 
 ### Making an instance
@@ -96,16 +96,16 @@ Now that we have a state machine *type*, let's create an instance with an initia
 var fsm = FSM.init();
 ```
 
-If you don't need to reference the state machine type, you can define the type and get an instance in one statement:
+If you don't need to reference the state machine type, you can define the type and get an instance like this:
 
 ```zig
-var fsm = FSM.StateMachine(State, Event, .off).init();
+var fsm = zigfsm.StateMachine(State, Event, .off).init();
 ```
 
 You can also pass anonymous state/event enums:
 
 ```zig
-var fsm = FSM.StateMachine(enum { on, off }, enum { click }, .off).init();
+var fsm = zigfsm.StateMachine(enum { on, off }, enum { click }, .off).init();
 ```
 
 ### Adding state transitions
@@ -152,7 +152,7 @@ const definition = [_]Transition(State, Event){
     .{ .event = .click, .from = .on, .to = .off },
     .{ .event = .click, .from = .off, .to = .on },
 };
-var fsm = StateMachineFromTable(State, Event, &definition, .off, &.{}).init();
+var fsm = zigfsm.StateMachineFromTable(State, Event, &definition, .off, &.{}).init();
 ```
 
 Note that the `.event` field is optional, in which case only transition validation is added.
