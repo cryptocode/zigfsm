@@ -99,13 +99,13 @@ var fsm = FSM.init();
 If you don't need to reference the state machine type, you can define the type and get an instance in one statement:
 
 ```zig
-var fsm = fsm.StateMachine(State, Event, .off).init();
+var fsm = FSM.StateMachine(State, Event, .off).init();
 ```
 
 You can also pass anonymous state/event enums:
 
 ```zig
-var fsm = fsm.StateMachine(enum { on, off }, enum { click }, .off).init();
+var fsm = FSM.StateMachine(enum { on, off }, enum { click }, .off).init();
 ```
 
 ### Adding state transitions
