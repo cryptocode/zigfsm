@@ -4,6 +4,10 @@ pub fn build(b: *std.build.Builder) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardOptimizeOption(.{});
 
+    const fsm_mod = b.addModule("fsm", .{
+        .source_file = .{.path = "src/main.zig"},
+    });
+
     const lib = b.addStaticLibrary(.{
         .name = "zigfsm",
         .root_source_file = .{
@@ -25,6 +29,7 @@ pub fn build(b: *std.build.Builder) void {
         .root_source_file = .{ .path = "src/benchmark.zig" },
         .optimize = std.builtin.Mode.ReleaseFast,
     });
+    benchmark.addModule("fsm", fsm_mod);
 
     b.installArtifact(benchmark);
 
