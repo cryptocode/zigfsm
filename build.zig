@@ -5,7 +5,7 @@ pub fn build(b: *std.build.Builder) void {
     const mode = b.standardOptimizeOption(.{});
 
     const fsm_mod = b.addModule("fsm", .{
-        .source_file = .{.path = "src/main.zig"},
+        .source_file = .{ .path = "src/main.zig" },
     });
 
     const lib = b.addStaticLibrary(.{
