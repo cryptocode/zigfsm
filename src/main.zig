@@ -118,7 +118,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
             if (comptime EventType != null) instance.internal.events = EventPackedIntArray.initAllTo(0);
 
             for (transitions) |t| {
-                var offset = (@intFromEnum(t.from) * state_type_count) + @intFromEnum(t.to);
+                const offset = (@intFromEnum(t.from) * state_type_count) + @intFromEnum(t.to);
                 instance.internal.state_map.setValue(offset, true);
 
                 if (comptime EventType != null) {
@@ -208,7 +208,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
         pub fn addEvent(self: *Self, event: EventTypeArg, from: StateType, to: StateType) !void {
             if (comptime EventType != null) {
                 if (self.canTransitionFromTo(from, to)) {
-                    var slot = computeEventSlot(event, from);
+                    const slot = computeEventSlot(event, from);
                     if (self.internal.events.get(slot) != 0) return StateError.AlreadyDefined;
                     self.internal.events.set(slot, @as(CellType, @intCast(@intFromEnum(to))) + 1);
                 } else return StateError.Invalid;
@@ -219,9 +219,9 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
         /// Returns `StateError.Invalid` if the event is not defined for the current state
         pub fn do(self: *Self, event: EventTypeArg) !Transition(StateType, EventType) {
             if (comptime EventType != null) {
-                var from_state = self.internal.current_state;
-                var slot = computeEventSlot(event, self.internal.current_state);
-                var to_state = self.internal.events.get(slot);
+                const from_state = self.internal.current_state;
+                const slot = computeEventSlot(event, self.internal.current_state);
+                const to_state = self.internal.events.get(slot);
                 if (to_state != 0) {
                     try self.transitionToInternal(event, @as(StateType, @enumFromInt(to_state - 1)));
                     return .{ .event = event, .from = from_state, .to = @as(StateType, @enumFromInt(to_state - 1)) };
@@ -377,7 +377,7 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
 
                 if (EventType) |T| {
                     if (options.show_events) {
-                        var events_start_offset = @as(usize, @intCast(@intFromEnum(from))) * event_type_count;
+                        const events_start_offset = @as(usize, @intCast(@intFromEnum(from))) * event_type_count;
                         var transition_name_buf: [4096]u8 = undefined;
                         var transition_name = std.io.fixedBufferStream(&transition_name_buf);
                         for (0..event_type_count) |event_index| {
@@ -554,7 +554,7 @@ pub fn FsmFromText(comptime input: []const u8) type {
                 } else if (std.mem.eql(u8, part, "end:")) {
                     _ = fsm.do(.endcolon) catch unreachable;
                 } else {
-                    var current_identifier = part;
+                    const current_identifier = part;
                     _ = fsm.do(.identifier) catch unreachable;
                     const to = fsm.currentState();
 
@@ -633,8 +633,8 @@ pub const Interface = struct {
     pub fn make(comptime InterfaceType: type, comptime Implementer: type) InterfaceType {
         var instance: InterfaceType = undefined;
         inline for (std.meta.fields(InterfaceType)) |f| {
-            if (comptime std.meta.trait.hasFn(f.name[0..f.name.len])(Implementer)) {
-                @field(instance, f.name) = @field(Implementer, f.name[0..f.name.len]);
+            if (comptime std.meta.hasFn(Implementer, f.name)) {
+                @field(instance, f.name) = @field(Implementer, f.name);
             }
         }
         return instance;
@@ -804,7 +804,7 @@ test "csv parser" {
             var stream = std.io.fixedBufferStream(self.csv);
             const reader = stream.reader();
             while (true) : (self.cur_index += 1) {
-                var input = reader.readByte() catch {
+                const input = reader.readByte() catch {
                     // An example of how to handle parsing errors
                     _ = self.fsm.do(.eof) catch {
                         try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
@@ -932,7 +932,7 @@ test "csv parser, without handler callback" {
             var stream = std.io.fixedBufferStream(self.csv);
             const reader = stream.reader();
             while (true) : (self.cur_index += 1) {
-                var input = reader.readByte() catch {
+                const input = reader.readByte() catch {
                     // An example of how to handle parsing errors
                     _ = self.fsm.do(.eof) catch {
                         try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
