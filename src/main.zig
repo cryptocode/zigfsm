@@ -535,7 +535,7 @@ pub fn FsmFromText(comptime input: []const u8) type {
 
         // Might as well use a state machine to implement importing textual state machines.
         // After an input event, we'll end up in one of these states:
-        comptime var fsm = ImportFSM.init();
+        var fsm = ImportFSM.init();
 
         var state_enum_fields: []const EnumField = &[_]EnumField{};
         var event_enum_fields: []const EnumField = &[_]EnumField{};
@@ -559,7 +559,7 @@ pub fn FsmFromText(comptime input: []const u8) type {
                     const to = fsm.currentState();
 
                     if (to == .startstate or to == .endstates or to == .source or to == .target) {
-                        inline for (state_enum_fields) |field| {
+                        for (state_enum_fields) |field| {
                             if (std.mem.eql(u8, field.name, current_identifier)) {
                                 continue :part_loop;
                             }
@@ -570,18 +570,18 @@ pub fn FsmFromText(comptime input: []const u8) type {
                         }
 
                         state_enum_fields = state_enum_fields ++ &[_]EnumField{.{
-                            .name = current_identifier,
+                            .name = current_identifier ++ "",
                             .value = state_enum_fields.len,
                         }};
                     } else if (to == .event) {
-                        inline for (event_enum_fields) |field| {
+                        for (event_enum_fields) |field| {
                             if (std.mem.eql(u8, field.name, current_identifier)) {
                                 continue :part_loop;
                             }
                         }
 
                         event_enum_fields = event_enum_fields ++ &[_]EnumField{.{
-                            .name = current_identifier,
+                            .name = current_identifier ++ "",
                             .value = event_enum_fields.len,
                         }};
                     }
@@ -650,7 +650,7 @@ pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_cou
         comptime var tmp_buf: [128]u8 = undefined;
         const field_name = comptime try std.fmt.bufPrint(&tmp_buf, "{s}{d}", .{ prefix, i });
         fields = fields ++ &[_]EnumField{.{
-            .name = field_name,
+            .name = field_name ++ "",
             .value = i,
         }};
     }

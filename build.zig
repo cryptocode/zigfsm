@@ -1,11 +1,11 @@
 const std = @import("std");
 
-pub fn build(b: *std.build.Builder) void {
+pub fn build(b: *std.Build) void {
     const target = b.standardTargetOptions(.{});
     const mode = b.standardOptimizeOption(.{});
 
     const fsm_mod = b.addModule("fsm", .{
-        .source_file = .{ .path = "src/main.zig" },
+        .root_source_file = .{ .path = "src/main.zig" },
     });
 
     const lib = b.addStaticLibrary(.{
@@ -28,8 +28,9 @@ pub fn build(b: *std.build.Builder) void {
         .name = "benchmark",
         .root_source_file = .{ .path = "src/benchmark.zig" },
         .optimize = std.builtin.Mode.ReleaseFast,
+        .target = target,
     });
-    benchmark.addModule("fsm", fsm_mod);
+    benchmark.root_module.addImport("fsm", fsm_mod);
 
     b.installArtifact(benchmark);
 

@@ -1,6 +1,6 @@
 <img align="right" width="160" height="160" src="https://user-images.githubusercontent.com/34946442/152222895-9c8adb22-a22d-4bce-a513-3486ca28bdd5.png"> zig**fsm** is a [finite state machine](https://en.wikipedia.org/wiki/Finite-state_machine) library for Zig.
 
-This library tracks [Zig master](https://github.com/ziglang/zig). Last test was on Zig version `0.12.0-dev.1746+19af8aac8`.
+This library tracks [Zig master](https://github.com/ziglang/zig). Last test was on Zig version `0.12.0-dev.2508+7b4561170`.
 
 ## Table of contents
 * [Features](#features)
