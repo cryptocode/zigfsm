@@ -2,26 +2,26 @@
 
 This library tracks [Zig master](https://github.com/ziglang/zig). Last test was on Zig version `0.12.0-dev.3161+377ecc6af`.
 
-## Table of contents
+## Table of Contents
 * [Features](#features)
 * [Motivation](#motivation)
 * [Using zigfsm](#using-zigfsm)
-    * [Building](#building)
-    * [Importing the library](#importing-the-library)
-    * [Learning from the tests](#learning-from-the-tests)
-    * [Creating a state machine type](#creating-a-state-machine-type)
-    * [Making an instance](#making-an-instance)
-    * [Adding state transitions](#adding-state-transitions)
-    * [Optionally defining events](#optionally-defining-events)
-    * [Defining transitions and events at the same time](#defining-transitions-and-events-at-the-same-time)
-    * [Defining transitions and events as a table](#defining-transitions-and-events-as-a-table)
-    * [Changing state](#changing-state)
-    * [Transition handlers](#transition-handlers)
-    * [Probing the current state](#probing-the-current-state)
-    * [Canceling transitions](#canceling-transitions)
-    * [Alternative to transition handlers](#alternative-to-transition-handlers)
-    * [Valid states iterator](#valid-states-iterator)
-    * [Importing state machines](#importing-state-machines)
+  * [Building](#building)
+  * [Importing the library](#importing-the-library)
+  * [Learning from the tests](#learning-from-the-tests)
+  * [Creating a state machine type](#creating-a-state-machine-type)
+  * [Making an instance](#making-an-instance)
+  * [Adding state transitions](#adding-state-transitions)
+  * [Optionally defining events](#optionally-defining-events)
+  * [Defining transitions and events at the same time](#defining-transitions-and-events-at-the-same-time)
+  * [Defining transitions and events as a table](#defining-transitions-and-events-as-a-table)
+  * [Changing state](#changing-state)
+  * [Probing the current state](#probing-the-current-state)
+  * [Inspecting what transition happened](#inspecting-what-transition-happened)
+  * [Transition handlers](#transition-handlers)
+     * [Canceling transitions](#canceling-transitions)
+  * [Valid states iterator](#valid-states-iterator)
+  * [Importing state machines](#importing-state-machines)
 
 ## Features
 * Never allocates
