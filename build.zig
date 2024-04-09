@@ -19,7 +19,7 @@ pub fn build(b: *std.Build) void {
 
     b.installArtifact(lib);
 
-    const main_tests = b.addTest(.{ .name = "tests", .root_source_file = .{ .path = "src/main.zig" } });
+    const main_tests = b.addTest(.{ .name = "tests", .root_source_file = .{ .path = "src/tests.zig" } });
 
     const test_step = b.step("test", "Run library tests");
     test_step.dependOn(&main_tests.step);
