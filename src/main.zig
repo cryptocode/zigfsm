@@ -102,7 +102,6 @@ pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type
         pub const EventEnum = if (EventType) |T| T else void;
 
         /// Transition handler interface
-        /// You only need to implement the functions you need
         pub const Handler = struct {
             onTransition: *const fn (self: *Handler, event: ?EventTypeArg, from: StateType, to: StateType) HandlerResult,
         };

@@ -15,8 +15,8 @@ This library tracks [Zig master](https://github.com/ziglang/zig). Last test was 
     * [Defining transitions and events at the same time](#defining-transitions-and-events-at-the-same-time)
     * [Defining transitions and events as a table](#defining-transitions-and-events-as-a-table)
     * [Changing state](#changing-state)
-    * [Probing the current state](#probing-the-current-state)
     * [Transition handlers](#transition-handlers)
+    * [Probing the current state](#probing-the-current-state)
     * [Canceling transitions](#canceling-transitions)
     * [Alternative to transition handlers](#alternative-to-transition-handlers)
     * [Valid states iterator](#valid-states-iterator)
@@ -194,11 +194,29 @@ To check if the current state is in the start state, call `isInStartState()`
 
 See the API docstring for more information about these are related functions.
 
+### Inspecting what transition happened
+
+```zig
+const transition = try fsm.do(.identifier);
+
+if (transition.to == .jumping and transition.from == .running) {
+    ...
+}
+```
+
+... where `transition` contains the fields `from`, `to` and `event`.
+
+Followed by an if/else chain that checks relevant combinations of from- and to states. This could, as an example, be used in a parser loop.
+
+See the tests for examples.
+
 ### Transition handlers
 
-In many non-trivial applications, especially when using events, you might want to know when a transition happens. Or you might need to cancel a transition in specific situations.
+The previous section explained how to inspect the source and target state. There's another way to do this, using callbacks.
 
-Moreover, you might need to keep additional state (such as source locations when writing a parser.) This is where transition handlers are useful.
+This gets called when a transition happens. The main benefit is that it allows you to cancel a transition.
+
+Handlers also makes it easy to keep additional state, such as source locations when writing a parser.
 
 Let's keep track of the number of times a light switch transition happens:
 
@@ -233,7 +251,7 @@ Because Zig doesn't offer a native way to define or implement interfaces, zigfsm
     };
 ```
 
-The first field must be the Handler interface, which we populate using `fsm.Interface.make`.
+The first field *must* be the Handler interface, which we populate using `fsm.Interface.make`.
 
 When `onTransition` is called, we "downcast" the handler argument to our specific `CountingHandler` type, which gives us access to the counter.
 
@@ -244,25 +262,6 @@ Note that `onTransition` must be public.
 The transition handler can conditionally stop a transition from happening by returning `HandlerResult.Cancel`. The callsite of `transitionTo` or `do` will then fail with `StateError.Invalid`
 
 Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)
-
-### Alternative to transition handlers
-Zig makes it a bit cumbersome to use callbacks where interfaces or lambdas are often used in other languages.
-
-An alternative that often works is to use this pattern:
-
-```zig
-const transition = try fsm.do(.identifier);
-
-if (transition.to == .jumping and transition.from == .running) {
-    ...
-}
-```
-
-... where `transition` contains the fields `from`, `to` and `event`.
-
-Followed by an if/else chain that checks relevant combinations of from- and to states. This could, as an example, be used in a parser loop.
-
-See the tests for examples.
 
 ### Valid states iterator
 
