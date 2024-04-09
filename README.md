@@ -8,6 +8,7 @@ This library tracks [Zig master](https://github.com/ziglang/zig). Last test was 
 * [Using zigfsm](#using-zigfsm)
     * [Building](#building)
     * [Importing the library](#importing-the-library)
+    * [Learning from the tests](#learning-from-the-tests)
     * [Creating a state machine type](#creating-a-state-machine-type)
     * [Making an instance](#making-an-instance)
     * [Adding state transitions](#adding-state-transitions)
