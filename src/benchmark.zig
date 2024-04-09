@@ -1,5 +1,5 @@
 const std = @import("std");
-const zigfsm = @import("fsm");
+const zigfsm = @import("zigfsm");
 
 // Run with `zig build benchmark`
 pub fn main() !void {

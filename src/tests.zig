@@ -1,5 +1,5 @@
 const std = @import("std");
-const zigfsm = @import("main.zig");
+const zigfsm = @import("zigfsm");
 
 const expect = std.testing.expect;
 const expectEqual = std.testing.expectEqual;

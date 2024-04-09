@@ -1,0 +1,13 @@
+.{
+    .name = "zigfsm",
+    .version = "0.2.0",
+    .paths = .{
+        "build.zig",
+        "build.zig.zon",
+        "src/benchmark.zig",
+        "src/main.zig",
+        "src/tests.zig",
+        "LICENSE",
+        "README.md",
+    },
+}
