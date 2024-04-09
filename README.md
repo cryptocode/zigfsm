@@ -65,11 +65,13 @@ The benchmark always runs under release-fast.
 
 ### Importing the library
 
-Add zigfsm as a [Zig package](https://ziglearn.org/chapter-3) in your build file, or simply import it directly after vendoring/adding a submodule:
+Add zigfsm as a Zig package in your `zon` file, or simply import main.zig directly after vendoring.
 
-```zig
-const zigfsm = @import("zigfsm/main.zig");
-```
+### Learning from the tests
+
+A good way to learn zigfsm is to study the [tests](https://github.com/cryptocode/zigfsm/blob/main/src/tests.zig) file.
+
+This file contains a number of self-contained tests that also demonstrates various aspects of the library.
 
 ### Creating a state machine type
 
