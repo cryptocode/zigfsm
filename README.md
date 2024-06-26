@@ -87,6 +87,7 @@ exe.root_module.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm")
 Now you can import zigfsm from any Zig file:
 
 ```zig
+// This example implements a simple Moore machine: a three-level intensity lightswitch
 const std = @import("std");
 const zigfsm = @import("zigfsm");
 
@@ -109,22 +110,16 @@ pub fn main() !void {
     try fsm.addEventAndTransition(.click, .medium, .bright);
     try fsm.addEventAndTransition(.click, .bright, .off);
 
-    // Do a full cycle of off -> dim -> medium -> bright -> off
     std.debug.assert(fsm.isCurrently(.off));
 
+    // Do a full cycle: off -> dim -> medium -> bright -> off
     _ = try fsm.do(.click);
-    std.debug.assert(fsm.isCurrently(.dim));
+    _ = try fsm.do(.click);
+    _ = try fsm.do(.click);
+    _ = try fsm.do(.click);
 
-    _ = try fsm.do(.click);
-    std.debug.assert(fsm.isCurrently(.medium));
-
-    _ = try fsm.do(.click);
-    std.debug.assert(fsm.isCurrently(.bright));
-
-    _ = try fsm.do(.click);
+    // Make sure we're in the expected state
     std.debug.assert(fsm.isCurrently(.off));
-
-    // Make sure we're in a good state
     std.debug.assert(fsm.canTransitionTo(.dim));
 }
 ```
