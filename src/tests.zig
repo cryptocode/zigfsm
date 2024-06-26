@@ -743,83 +743,90 @@ test "iterate next valid states, using state machine with generated enums" {
     try expectEqual(next_valid_iterator.next(), null);
 }
 
-/// An elevator state machine
-const ElevatorTest = struct {
-    const Elevator = enum { doors_opened, doors_closed, moving, exit_light_blinking };
-    const ElevatorActions = enum { open, close, alarm };
+// A simple push-down automaton to reliably return from jumping
+// to the original standing or crouching state. Double-jumps
+// leads to flying.
+///
+// In this example, we have a simple do/undo API. In a real-world app,
+// a pushdown-automaton can obviously have any API suitable for
+// the situation.
+const GameState = struct {
+    fsm: FSM,
+    stack: std.ArrayList(FSM.StateEnum),
 
-    pub fn init() !zigfsm.StateMachine(Elevator, ElevatorActions, .doors_opened) {
-        var fsm = zigfsm.StateMachine(Elevator, ElevatorActions, .doors_opened).init();
-        try fsm.addTransition(.doors_opened, .doors_closed);
-        try fsm.addTransition(.doors_closed, .moving);
-        try fsm.addTransition(.moving, .moving);
-        try fsm.addTransition(.doors_opened, .exit_light_blinking);
-        try fsm.addTransition(.doors_closed, .doors_opened);
-        try fsm.addTransition(.exit_light_blinking, .doors_opened);
-        return fsm;
+    const FSM = zigfsm.StateMachine(
+        enum { standing, crouching, jumping, flying },
+        enum { walk, jump },
+        .standing,
+    );
+
+    pub fn init() !GameState {
+        var state = GameState{
+            .fsm = FSM.init(),
+            .stack = std.ArrayList(FSM.StateEnum).init(std.testing.allocator),
+        };
+
+        // Event-triggered transitions
+        try state.fsm.addEventAndTransition(.jump, .standing, .jumping);
+        try state.fsm.addEventAndTransition(.jump, .crouching, .jumping);
+        try state.fsm.addEventAndTransition(.jump, .jumping, .flying);
+
+        // The valid undo-transitions for the push-down automaton
+        try state.fsm.addTransition(.flying, .jumping);
+        try state.fsm.addTransition(.jumping, .standing);
+        try state.fsm.addTransition(.jumping, .crouching);
+        return state;
+    }
+
+    pub fn deinit(self: *GameState) void {
+        self.stack.deinit();
+    }
+
+    // Trigger an undoable event
+    pub fn do(self: *GameState, event: FSM.EventEnum) !zigfsm.Transition(FSM.StateEnum, FSM.EventEnum) {
+        try self.stack.append(self.fsm.currentState());
+        return try self.fsm.do(event);
+    }
+
+    // Pops from the state stack and transitions to it. Returns true if stack had at least one state.
+    pub fn undo(self: *GameState) !bool {
+        if (self.stack.popOrNull()) |state| {
+            try self.fsm.transitionTo(state);
+            return true;
+        } else return false;
     }
 };
 
-test "elevator: redefine transition should fail" {
-    var fsm = try ElevatorTest.init();
-    try expectError(zigfsm.StateError.AlreadyDefined, fsm.addTransition(.doors_opened, .doors_closed));
+test "push-down automaton game: standing -> jumping -> standing" {
+    var state = try GameState.init();
+    defer state.deinit();
+
+    // We can jump whether we're standing or crouching
+    _ = try state.do(.jump);
+    std.debug.assert(state.fsm.isCurrently(.jumping));
+
+    // Go back to previous state from jumping
+    _ = try state.undo();
+    std.debug.assert(state.fsm.isCurrently(.standing));
 }
 
-test "elevator: apply" {
-    var fsm = try ElevatorTest.init();
-    try fsm.addEvent(.alarm, .doors_opened, .exit_light_blinking);
-    try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_closed });
-    try fsm.apply(.{ .state = ElevatorTest.Elevator.doors_opened });
-    try fsm.apply(.{ .event = ElevatorTest.ElevatorActions.alarm });
-    try expect(fsm.isCurrently(.exit_light_blinking));
-}
+test "push-down automaton game: crouching -> jumping -> flying -> jumping -> croaching" {
+    var state = try GameState.init();
+    defer state.deinit();
 
-test "elevator: transition success" {
-    var fsm = try ElevatorTest.init();
-    try fsm.transitionTo(.doors_closed);
-    try expectEqual(fsm.currentState(), .doors_closed);
-}
+    // Next sequence is: crouching -> jumping -> flying -> jumping -> croaching
+    try state.fsm.transitionToSilently(.crouching, false);
 
-test "elevator: add an event and activate it" {
-    var fsm = try ElevatorTest.init();
+    // Double jump to start flying
+    _ = try state.do(.jump);
+    _ = try state.do(.jump);
+    std.debug.assert(state.fsm.isCurrently(.flying));
 
-    // The same event can be invoked for multiple state transitions
-    try fsm.addEvent(.alarm, .doors_opened, .exit_light_blinking);
-    try expectEqual(fsm.currentState(), .doors_opened);
-
-    _ = try fsm.do(.alarm);
-    try expectEqual(fsm.currentState(), .exit_light_blinking);
-}
-
-test "statemachine from transition array" {
-    const Elevator = enum { doors_opened, doors_closed, exit_light_blinking, moving };
-    const Events = enum { open, close, alarm, notused1, notused2 };
-
-    const defs = [_]zigfsm.Transition(Elevator, Events){
-        .{ .event = .open, .from = .doors_closed, .to = .doors_opened },
-        .{ .event = .open, .from = .doors_opened, .to = .doors_opened },
-        .{ .event = .close, .from = .doors_opened, .to = .doors_closed },
-        .{ .event = .close, .from = .doors_closed, .to = .doors_closed },
-        .{ .event = .alarm, .from = .doors_closed, .to = .doors_opened },
-        .{ .event = .alarm, .from = .doors_opened, .to = .exit_light_blinking },
-        .{ .from = .doors_closed, .to = .moving },
-        .{ .from = .moving, .to = .moving },
-        .{ .from = .moving, .to = .doors_closed },
-    };
-
-    const final_states = [_]Elevator{};
-    const FSM = zigfsm.StateMachineFromTable(Elevator, Events, defs[0..], .doors_closed, final_states[0..]);
-
-    var fsm = FSM.init();
-
-    try fsm.transitionTo(.doors_opened);
-    try fsm.transitionTo(.doors_opened);
-    if (!fsm.canTransitionTo(.moving)) {
-        fsm.transitionTo(.moving) catch {};
-        try fsm.transitionTo(.doors_closed);
-        if (fsm.canTransitionTo(.moving)) try fsm.transitionTo(.moving);
-        try fsm.transitionTo(.doors_closed);
-    }
+    // Go back to previous state from jumping
+    _ = try state.undo();
+    std.debug.assert(state.fsm.isCurrently(.jumping));
+    _ = try state.undo();
+    std.debug.assert(state.fsm.isCurrently(.crouching));
 }
 
 test {

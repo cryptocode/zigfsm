@@ -36,6 +36,7 @@ Tested on Linux, macOS, FreeBSD and Windows.
 * Defined programmatically or by importing Graphviz or libfsm text (even at compile time)
 * Imported state machines can autogenerate state- and event enums
 * Optional event listeners can add functionality and cancel transitions
+* Push-down automaton wrappers are easy to write (see GameState example in tests.zig)
 * Comprehensive test coverage which also serves as examples
 
 ## Motivation
