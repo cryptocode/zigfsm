@@ -13,10 +13,10 @@ const expectError = std.testing.expectError;
 test "moore machine: three-level intensity light" {
     // A state machine type is defined using state enums and, optionally, event enums.
     // An event takes the state machine from one state to another, but you can also switch to
-    // other states without using events. The test file has many examples on this.
+    // other states without using events.
     //
-    // State and event enums can be explicit enum types, generated enums, or anonymous enums
-    // like in this example.
+    // State and event enums can be explicit enum types, comptime generated enums, or
+    // anonymous enums like in this example.
     //
     // If you don't want to use events, simply pass null to the second argument.
     // We also define what state is the initial one, in this case .off

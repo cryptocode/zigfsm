@@ -2,7 +2,7 @@
 
 This library supports Zig 0.12.x, 0.13 as well as Zig master. Last test was on Zig version `0.14.0-dev.32+4aa15440c`.
 
-Use the zigfsm main branch to compile with Zig master. Use the appropriate zig-<version> tag to target a Zig version not compatible with the main branch.
+Use the zigfsm main branch to compile with Zig master. Use the appropriate zig-*version* tag to target a Zig version not compatible with the main branch.
 
 Tested on Linux, macOS, FreeBSD and Windows.
 
@@ -84,7 +84,7 @@ Next, update your `build.zig` to add zigfsm as an import. For example:
 exe.root_module.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
 ```
 
-Now you can import zigfsm from any Zig:
+Now you can import zigfsm from any Zig file:
 
 ```zig
 const std = @import("std");
@@ -93,10 +93,10 @@ const zigfsm = @import("zigfsm");
 pub fn main() !void {
     // A state machine type is defined using state enums and, optionally, event enums.
     // An event takes the state machine from one state to another, but you can also switch to
-    // other states without using events. The test file has many examples on this.
+    // other states without using events.
     //
-    // State and event enums can be explicit enum types, generated enums, or anonymous enums
-    // like in this example.
+    // State and event enums can be explicit enum types, comptime generated enums, or
+    // anonymous enums like in this example.
     //
     // If you don't want to use events, simply pass null to the second argument.
     // We also define what state is the initial one, in this case .off

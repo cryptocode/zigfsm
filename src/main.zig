@@ -1,6 +1,7 @@
-//! The zigfsm library implements two state machine types, StateMachineFromTable and StateMachine.
+//! The zigfsm library offer two state machine type constructors, StateMachineFromTable and StateMachine.
 //! The first type is defined using an array of events and state transitions.
 //! The second type is defined by calling methods for adding events and transitions.
+//! State machines can also be constructed by importing Graphviz or libfsm text.
 //! SPDX-License-Identifier: MIT
 
 const std = @import("std");
@@ -58,13 +59,23 @@ const ImportFSM = StateMachineFromTable(ImportLineState, ImportInput, import_tra
 
 /// Construct a state machine type given a state enum and an optional event enum.
 /// Add states and events using the member functions.
-pub fn StateMachine(comptime StateType: type, comptime EventType: ?type, comptime initial_state: StateType) type {
+pub fn StateMachine(
+    comptime StateType: type,
+    comptime EventType: ?type,
+    comptime initial_state: StateType,
+) type {
     return StateMachineFromTable(StateType, EventType, &[0]Transition(StateType, EventType){}, initial_state, &[0]StateType{});
 }
 
 /// Construct a state machine type given a state enum, an optional event enum, a transition table, initial state and end states (which can be empty)
 /// If you want to add transitions and end states using the member methods, you can use `StateMachine(...)` as a shorthand.
-pub fn StateMachineFromTable(comptime StateType: type, comptime EventType: ?type, comptime transitions: []const Transition(StateType, EventType), comptime initial_state_a: StateType, comptime final_states: []const StateType) type {
+pub fn StateMachineFromTable(
+    comptime StateType: type,
+    comptime EventType: ?type,
+    comptime transitions: []const Transition(StateType, EventType),
+    comptime initial_state_a: StateType,
+    comptime final_states: []const StateType,
+) type {
     const initial_state = initial_state_a;
     const StateEventSelector = enum { state, event };
     const EventTypeArg = if (EventType) |T| T else void;
