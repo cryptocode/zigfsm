@@ -815,7 +815,7 @@ test "push-down automaton game: crouching -> jumping -> flying -> jumping -> cro
     defer state.deinit();
 
     // Next sequence is: crouching -> jumping -> flying -> jumping -> croaching
-    try state.fsm.transitionToSilently(.crouching, false);
+    state.fsm.setStartState(.crouching);
 
     // Double jump to start flying
     _ = try state.do(.jump);
