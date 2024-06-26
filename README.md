@@ -1,8 +1,10 @@
 <img align="right" width="160" height="160" src="https://user-images.githubusercontent.com/34946442/152222895-9c8adb22-a22d-4bce-a513-3486ca28bdd5.png"> zig**fsm** is a [finite state machine](https://en.wikipedia.org/wiki/Finite-state_machine) library for Zig.
 
-This library supports Zig 0.12 as well as Zig master. Last test was on Zig version `0.13.0-dev.346+e54fcdb5b`.
+This library supports Zig 0.12.x, 0.13 as well as Zig master. Last test was on Zig version `0.14.0-dev.32+4aa15440c`.
 
-Use the zigfsm master branch to compile with Zig master. Use the zig-0.12 tag to compile with Zig 0.12.
+Use the zigfsm main branch to compile with Zig master. Use the appropriate zig-<version> tag to target a Zig version not compatible with the main branch.
+
+Tested on Linux, macOS, FreeBSD and Windows.
 
 ## Table of Contents
 * [Features](#features)
@@ -20,10 +22,10 @@ Use the zigfsm master branch to compile with Zig master. Use the zig-0.12 tag to
   * [Changing state](#changing-state)
   * [Probing the current state](#probing-the-current-state)
   * [Inspecting what transition happened](#inspecting-what-transition-happened)
-  * [Transition handlers](#transition-handlers)
-     * [Canceling transitions](#canceling-transitions)
   * [Valid states iterator](#valid-states-iterator)
   * [Importing state machines](#importing-state-machines)
+  * [Transition handlers](#transition-handlers)
+     * [Canceling transitions](#canceling-transitions)
 
 ## Features
 * Never allocates
@@ -31,16 +33,16 @@ Use the zigfsm master branch to compile with Zig master. Use the zig-0.12 tag to
 * Fast transition validation
 * Compact memory representation
 * State machines can export themselves to the Graphviz DOT format
-* Defined programmatically or by importing Graphviz or libfsm text
-* Imported state machines can autogenerate state- and event enums at compile time
+* Defined programmatically or by importing Graphviz or libfsm text (even at compile time)
+* Imported state machines can autogenerate state- and event enums
 * Optional event listeners can add functionality and cancel transitions
 * Comprehensive test coverage which also serves as examples
 
 ## Motivation
 Using an FSM library may have some benefits over hand-written state machines:
 * Many real-world processes, algorithms, and protocols have rigorously defined state machines available. These can be imported directly or programmatically into zigfsm.
-* Can lead to significant simplification in code, and all transition rules are sited in one place.
-* An invalid state transition is an immediate error with useful contextual information. Contrast this with the brittleness of manually checking, or even just documenting, which states can follow a certain state when a certain event happens.
+* Can lead to significant simplification of code, as transition rules are explicitly stated in one place. Contrast this with the brittleness of manually checking and documenting which states can follow a certain state when a certain event happens.
+* An invalid state transition is an immediate error with useful contextual information. 
 * You get visualization for free, which is helpful during development, debugging and as documentation.
 
 ## Using zigfsm
@@ -59,16 +61,73 @@ A png can be produced using the following command: `dot -Tpng csv.gv -o csv.png`
 To build, test and benchmark:
 
 ```
-zig build
+zig build -Doptimize=ReleaseFast
 zig build test
 zig build benchmark
 ```
 
-The benchmark always runs under release-fast.
+The benchmark always runs under ReleaseFast.
 
 ### Importing the library
 
-Add zigfsm as a Zig package in your `zon` file, or simply import main.zig directly after vendoring.
+Add zigfsm as a Zig package to your `zon` file, or simply import `main.zig` directly if vendoring.
+
+Here's how to update your zon file using the latest commit of zigfsm:
+
+```bash
+zig fetch --save git+https://github.com/cryptocode/zigfsm
+```
+
+Next, update your `build.zig` to add zigfsm as an import. For example:
+
+```zig
+exe.root_module.addImport("zigfsm", b.dependency("zigfsm", .{}).module("zigfsm"));
+```
+
+Now you can import zigfsm from any Zig:
+
+```zig
+const std = @import("std");
+const zigfsm = @import("zigfsm");
+
+pub fn main() !void {
+    // A state machine type is defined using state enums and, optionally, event enums.
+    // An event takes the state machine from one state to another, but you can also switch to
+    // other states without using events. The test file has many examples on this.
+    //
+    // State and event enums can be explicit enum types, generated enums, or anonymous enums
+    // like in this example.
+    //
+    // If you don't want to use events, simply pass null to the second argument.
+    // We also define what state is the initial one, in this case .off
+    var fsm = zigfsm.StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
+
+    // There are many ways to define transitions (and optionally events), including importing
+    // from Graphviz. In this example we use a simple API to add events and transitions.
+    try fsm.addEventAndTransition(.click, .off, .dim);
+    try fsm.addEventAndTransition(.click, .dim, .medium);
+    try fsm.addEventAndTransition(.click, .medium, .bright);
+    try fsm.addEventAndTransition(.click, .bright, .off);
+
+    // Do a full cycle of off -> dim -> medium -> bright -> off
+    std.debug.assert(fsm.isCurrently(.off));
+
+    _ = try fsm.do(.click);
+    std.debug.assert(fsm.isCurrently(.dim));
+
+    _ = try fsm.do(.click);
+    std.debug.assert(fsm.isCurrently(.medium));
+
+    _ = try fsm.do(.click);
+    std.debug.assert(fsm.isCurrently(.bright));
+
+    _ = try fsm.do(.click);
+    std.debug.assert(fsm.isCurrently(.off));
+
+    // Make sure we're in a good state
+    std.debug.assert(fsm.canTransitionTo(.dim));
+}
+```
 
 ### Learning from the tests
 
@@ -215,59 +274,6 @@ Followed by an if/else chain that checks relevant combinations of from- and to s
 
 See the tests for examples.
 
-### Transition handlers
-
-The previous section explained how to inspect the source and target state. There's another way to do this, using callbacks.
-
-This gets called when a transition happens. The main benefit is that it allows you to cancel a transition.
-
-Handlers also makes it easy to keep additional state, such as source locations when writing a parser.
-
-Let's keep track of the number of times a light switch transition happens:
-
-```zig
-var countingHandler = CountingHandler.init();
-try fsm.addTransitionHandler(&countingHandler.handler);
-```
-
-Whenever a transition happens, the handler's `onTransition` function will be called.
-
-To write `CountingHandler`, we have to implement the `Handler` "interface" that zigfsm defines for you.
-
-Because Zig doesn't offer a native way to define or implement interfaces, zigfsm comes with a bit of metaprogramming magic to make this relatively easy:
-
-```zig
-    const CountingHandler = struct {
-        handler: FSM.Handler,
-        counter: usize,
-
-        pub fn init() @This() {
-            return .{
-                .handler = fsm.Interface.make(FSM.Handler, @This()),
-                .counter = 0,
-            };
-        }
-
-        pub fn onTransition(handler: *FSM.Handler, event: ?Event, from: State, to: State) HandlerResult {
-            const self = fsm.Interface.downcast(@This(), handler);
-            self.counter += 1;
-            return HandlerResult.Continue;
-        }
-    };
-```
-
-The first field *must* be the Handler interface, which we populate using `fsm.Interface.make`.
-
-When `onTransition` is called, we "downcast" the handler argument to our specific `CountingHandler` type, which gives us access to the counter.
-
-Note that `onTransition` must be public.
-
-#### Canceling transitions
-
-The transition handler can conditionally stop a transition from happening by returning `HandlerResult.Cancel`. The callsite of `transitionTo` or `do` will then fail with `StateError.Invalid`
-
-Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)
-
 ### Valid states iterator
 
 It's occasionally useful to know which states are possible to reach from the current state. This is done using an iterator:
@@ -289,3 +295,27 @@ It's possible, even at compile time, to parse a `Graphviz` or `libfsm` text file
 The source input can be a string literal, or brought in by `@embedFile`.
 
 See the test cases for examples on how to use the import features.
+
+### Transition handlers
+
+A previous section explained how to inspect the source and target state. There's another way to do this, using callbacks.
+
+This gets called when a transition happens. The main benefit is that it allows you to cancel a transition.
+
+Handlers also makes it easy to keep additional state, such as source locations when writing a parser.
+
+Let's keep track of the number of times a light switch transition happens:
+
+```zig
+var countingHandler = CountingHandler.init();
+try fsm.addTransitionHandler(&countingHandler.handler);
+```
+
+Whenever a transition happens, the handler's public `onTransition` function will be called. See tests for complete
+examples of usage.
+
+#### Canceling transitions
+
+The transition handler can conditionally stop a transition from happening by returning `HandlerResult.Cancel`. The callsite of `transitionTo` or `do` will then fail with `StateError.Invalid`
+
+Alternatively,`HandlerResult.CancelNoError` can be used to cancel without failure (in other words, the current state remains but the callsite succeeds)

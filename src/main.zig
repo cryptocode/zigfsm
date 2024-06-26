@@ -1,7 +1,7 @@
 //! The zigfsm library implements two state machine types, StateMachineFromTable and StateMachine.
 //! The first type is defined using an array of events and state transitions.
 //! The second type is defined by calling methods for adding events and transitions.
-//! Licence: MIT
+//! SPDX-License-Identifier: MIT
 
 const std = @import("std");
 const EnumField = std.builtin.Type.EnumField;

@@ -1,3 +1,6 @@
+//! Run tests with zig build test
+//! SPDX-License-Identifier: MIT
+
 const std = @import("std");
 const zigfsm = @import("zigfsm");
 
@@ -6,12 +9,48 @@ const expectEqual = std.testing.expectEqual;
 const expectEqualSlices = std.testing.expectEqualSlices;
 const expectError = std.testing.expectError;
 
-test "generate state enums" {
-    const State = zigfsm.GenerateConsecutiveEnum("S", 100);
-    var fsm = zigfsm.StateMachine(State, null, .S0).init();
-    try fsm.addTransition(.S0, .S1);
-    try fsm.transitionTo(.S1);
-    try expectEqual(fsm.currentState(), .S1);
+// Demonstrates that triggering a single "click" event can perpetually cycle through intensity states.
+test "moore machine: three-level intensity light" {
+    // A state machine type is defined using state enums and, optionally, event enums.
+    // An event takes the state machine from one state to another, but you can also switch to
+    // other states without using events. The test file has many examples on this.
+    //
+    // State and event enums can be explicit enum types, generated enums, or anonymous enums
+    // like in this example.
+    //
+    // If you don't want to use events, simply pass null to the second argument.
+    // We also define what state is the initial one, in this case .off
+    var fsm = zigfsm.StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
+
+    try fsm.addEventAndTransition(.click, .off, .dim);
+    try fsm.addEventAndTransition(.click, .dim, .medium);
+    try fsm.addEventAndTransition(.click, .medium, .bright);
+    try fsm.addEventAndTransition(.click, .bright, .off);
+
+    // Do a full cycle of off -> dim -> medium -> bright -> off
+
+    try expect(fsm.isCurrently(.off));
+
+    _ = try fsm.do(.click);
+    try expect(fsm.isCurrently(.dim));
+
+    _ = try fsm.do(.click);
+    try expect(fsm.isCurrently(.medium));
+
+    _ = try fsm.do(.click);
+    try expect(fsm.isCurrently(.bright));
+
+    _ = try fsm.do(.click);
+    try expect(fsm.isCurrently(.off));
+
+    // Make sure we're in a good state
+    try expect(fsm.canTransitionTo(.dim));
+    try expect(!fsm.canTransitionTo(.medium));
+    try expect(!fsm.canTransitionTo(.bright));
+    try expect(!fsm.canTransitionTo(.off));
+
+    // Uncomment to generate a Graphviz diagram
+    // try fsm.exportGraphviz("lights", std.io.getStdOut().writer(), .{.layout = "circo", .shape = "box"});
 }
 
 test "minimal without event" {
@@ -72,6 +111,36 @@ test "minimal with event defined using a table" {
     try expectEqual(fsm.currentState(), .off);
 }
 
+test "generate state enum" {
+    // When you have a simple sequence of states, such as S0, S1, ... then you
+    // can have zigfsm generate these for you, rather than manually creating
+    // the enum. The same applies to events; see next test.
+    // You can use any prefix; here we use S
+    const State = zigfsm.GenerateConsecutiveEnum("S", 100);
+    var fsm = zigfsm.StateMachine(State, null, .S0).init();
+    try fsm.addTransition(.S0, .S1);
+    try fsm.transitionTo(.S1);
+    try expectEqual(fsm.currentState(), .S1);
+}
+
+test "generate state enum and event enum" {
+    // Generate state enums, S0, S1, ...
+    const State = zigfsm.GenerateConsecutiveEnum("S", 100);
+
+    // We also generate event enums, E0, E1, ...
+    const Event = zigfsm.GenerateConsecutiveEnum("E", 100);
+
+    // Initialize the state machine in state S0
+    var fsm = zigfsm.StateMachine(State, Event, .S0).init();
+
+    // When event E0 happens when in state S0, go to state S1
+    try fsm.addEventAndTransition(.E0, .S0, .S1);
+    _ = try fsm.do(.E0);
+
+    // Make sure we're in the correct state after the event fired
+    try expectEqual(fsm.currentState(), .S1);
+}
+
 test "check state" {
     const State = enum { start, stop };
     const FSM = zigfsm.StateMachine(State, null, .start);
@@ -89,6 +158,39 @@ test "check state" {
     try expect(fsm.isCurrently(.stop));
     try expectEqual(fsm.currentState(), .stop);
     try expect(fsm.isInFinalState());
+}
+
+// Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
+// Comptime state machines finally works in stage2, see https://github.com/ziglang/zig/issues/10694
+test "comptime dfa: binary alphabet, require even number of zeros in input" {
+    comptime {
+        @setEvalBranchQuota(10_000);
+
+        // Note that both "start: S1;" and "start: -> S1;" syntaxes work, same with end:
+        const input =
+            \\ S1 -> S2 [label = "0"];
+            \\ S2 -> S1 [label = "0"];
+            \\ S1 -> S1 [label = "1"];
+            \\ S2 -> S2 [label = "1"];
+            \\ start: S1;
+            \\ end: S1;
+        ;
+
+        const State = enum { S1, S2 };
+        const Bit = enum { @"0", @"1" };
+        var fsm = zigfsm.StateMachine(State, Bit, .S1).init();
+        try fsm.importText(input);
+
+        // With valid input, we wil end up in the final state
+        const valid_input: []const Bit = &.{ .@"0", .@"0", .@"1", .@"1" };
+        for (valid_input) |bit| _ = try fsm.do(bit);
+        try expect(fsm.isInFinalState());
+
+        // With invalid input, we will not end up in the final state
+        const invalid_input: []const Bit = &.{ .@"0", .@"0", .@"0", .@"1" };
+        for (invalid_input) |bit| _ = try fsm.do(bit);
+        try expect(!fsm.isInFinalState());
+    }
 }
 
 // Simple CSV parser based on the state model in https://ppolv.wordpress.com/2008/02/25/parsing-csv-in-erlang
@@ -351,41 +453,6 @@ test "csv parser, without handler callback" {
     // try fsm.exportGraphviz("csv", std.io.getStdOut().writer(), .{.shape = "box", .shape_final_state = "doublecircle", .show_initial_state=true});
 }
 
-// Demonstrates that triggering a single "click" event can perpetually cycle through intensity states.
-test "moore machine: three-level intensity light" {
-    // Here we use anonymous state/event enums, Zig will still allow us to reference these
-    var fsm = zigfsm.StateMachine(enum { off, dim, medium, bright }, enum { click }, .off).init();
-
-    try fsm.addEventAndTransition(.click, .off, .dim);
-    try fsm.addEventAndTransition(.click, .dim, .medium);
-    try fsm.addEventAndTransition(.click, .medium, .bright);
-    try fsm.addEventAndTransition(.click, .bright, .off);
-
-    // Event a full cycle of off -> dim -> medium -> bright -> off
-
-    try expect(fsm.isCurrently(.off));
-
-    _ = try fsm.do(.click);
-    try expect(fsm.isCurrently(.dim));
-
-    _ = try fsm.do(.click);
-    try expect(fsm.isCurrently(.medium));
-
-    _ = try fsm.do(.click);
-    try expect(fsm.isCurrently(.bright));
-
-    _ = try fsm.do(.click);
-    try expect(fsm.isCurrently(.off));
-
-    try expect(fsm.canTransitionTo(.dim));
-    try expect(!fsm.canTransitionTo(.medium));
-    try expect(!fsm.canTransitionTo(.bright));
-    try expect(!fsm.canTransitionTo(.off));
-
-    // Uncomment to generate a Graphviz diagram
-    // try fsm.exportGraphviz("lights", std.io.getStdOut().writer(), .{.layout = "circo", .shape = "box"});
-}
-
 test "handler that cancels" {
     const State = enum { on, off };
     const Event = enum { click };
@@ -397,6 +464,7 @@ test "handler that cancels" {
     // handlers typically check from/to states and perhaps even which event (if any) caused the
     // transition.
     const CountingHandler = struct {
+        // The handler must be the first field
         handler: FSM.Handler,
         counter: usize,
 
@@ -425,39 +493,6 @@ test "handler that cancels" {
 
     // Third time will fail
     try expectError(zigfsm.StateError.Canceled, fsm.do(.click));
-}
-
-// Implements https://en.wikipedia.org/wiki/Deterministic_finite_automaton#Example
-// Comptime state machines finally works in stage2, see https://github.com/ziglang/zig/issues/10694
-test "comptime dfa: binary alphabet, require even number of zeros in input" {
-    comptime {
-        @setEvalBranchQuota(10_000);
-
-        // Note that both "start: S1;" and "start: -> S1;" syntaxes work, same with end:
-        const input =
-            \\ S1 -> S2 [label = "0"];
-            \\ S2 -> S1 [label = "0"];
-            \\ S1 -> S1 [label = "1"];
-            \\ S2 -> S2 [label = "1"];
-            \\ start: S1;
-            \\ end: S1;
-        ;
-
-        const State = enum { S1, S2 };
-        const Bit = enum { @"0", @"1" };
-        var fsm = zigfsm.StateMachine(State, Bit, .S1).init();
-        try fsm.importText(input);
-
-        // With valid input, we wil end up in the final state
-        const valid_input: []const Bit = &.{ .@"0", .@"0", .@"1", .@"1" };
-        for (valid_input) |bit| _ = try fsm.do(bit);
-        try expect(fsm.isInFinalState());
-
-        // With invalid input, we will not end up in the final state
-        const invalid_input: []const Bit = &.{ .@"0", .@"0", .@"0", .@"1" };
-        for (invalid_input) |bit| _ = try fsm.do(bit);
-        try expect(!fsm.isInFinalState());
-    }
 }
 
 test "import: graphviz" {
@@ -745,7 +780,7 @@ test "elevator: transition success" {
     try expectEqual(fsm.currentState(), .doors_closed);
 }
 
-test "elevator: add an event and active it" {
+test "elevator: add an event and activate it" {
     var fsm = try ElevatorTest.init();
 
     // The same event can be invoked for multiple state transitions
