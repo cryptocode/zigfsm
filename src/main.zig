@@ -664,7 +664,7 @@ pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_cou
             .value = i,
         }};
     }
-    return @Type(.{ .Enum = .{
+    return @Type(.{ .@"enum" = .{
         .fields = fields,
         .tag_type = std.math.IntFittingRange(0, element_count),
         .decls = &[_]std.builtin.Type.Declaration{},
