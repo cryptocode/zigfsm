@@ -95,8 +95,14 @@ pub fn StateMachineFromTable(
     // Events are organized into a packed 2D array. Indexing by state and event yields the next state (where 0 means no transition)
     // Add 1 to bit_count because zero is used to indicates absence of transition (no target state defined for a source state/event combination)
     // Cell values must thus be adjusted accordingly when added or queried.
-    const CellType = std.meta.Int(.unsigned, @as(u16, @max(state_enum_bits, event_enum_bits)) + 1);
-    const EventPackedIntArray = if (EventType != null) std.PackedIntArray(CellType, state_type_count * @max(event_type_count, 1)) else void;
+    const bits_per_cell = @as(u16, @max(state_enum_bits, event_enum_bits)) + 1;
+    const total_bits = (bits_per_cell * state_type_count * @max(event_type_count, 1));
+    const total_bytes = total_bits / 8 + 1;
+    const CellType = std.meta.Int(.unsigned, bits_per_cell);
+    const EventPackedIntArray = if (EventType != null)
+        [total_bytes]u8
+    else
+        void;
 
     return struct {
         internal: struct {
@@ -125,7 +131,9 @@ pub fn StateMachineFromTable(
             instance.internal.final_states = FinalStatesType.initEmpty();
             instance.internal.transition_handlers = &.{};
             instance.internal.state_map = TransitionBitSet.initEmpty();
-            if (comptime EventType != null) instance.internal.events = EventPackedIntArray.initAllTo(0);
+            if (comptime EventType != null) {
+                instance.internal.events = .{0} ** total_bytes;
+            }
 
             for (transitions) |t| {
                 const offset = (@intFromEnum(t.from) * state_type_count) + @intFromEnum(t.to);
@@ -134,7 +142,7 @@ pub fn StateMachineFromTable(
                 if (comptime EventType != null) {
                     if (t.event) |event| {
                         const slot = computeEventSlot(event, t.from);
-                        instance.internal.events.set(slot, @intFromEnum(t.to) + @as(CellType, 1));
+                        std.mem.writePackedIntNative(CellType, &instance.internal.events, slot * bits_per_cell, @intFromEnum(t.to) + @as(CellType, 1));
                     }
                 }
             }
@@ -219,8 +227,9 @@ pub fn StateMachineFromTable(
             if (comptime EventType != null) {
                 if (self.canTransitionFromTo(from, to)) {
                     const slot = computeEventSlot(event, from);
-                    if (self.internal.events.get(slot) != 0) return StateError.AlreadyDefined;
-                    self.internal.events.set(slot, @as(CellType, @intCast(@intFromEnum(to))) + 1);
+                    const slot_val = std.mem.readPackedIntNative(CellType, &self.internal.events, slot * bits_per_cell);
+                    if (slot_val != 0) return StateError.AlreadyDefined;
+                    std.mem.writePackedIntNative(CellType, &self.internal.events, slot * bits_per_cell, @as(CellType, @intCast(@intFromEnum(to))) + 1);
                 } else return StateError.Invalid;
             }
         }
@@ -231,7 +240,7 @@ pub fn StateMachineFromTable(
             if (comptime EventType != null) {
                 const from_state = self.internal.current_state;
                 const slot = computeEventSlot(event, self.internal.current_state);
-                const to_state = self.internal.events.get(slot);
+                const to_state = std.mem.readPackedIntNative(CellType, &self.internal.events, slot * bits_per_cell);
                 if (to_state != 0) {
                     try self.transitionToInternal(event, @as(StateType, @enumFromInt(to_state - 1)));
                     return .{ .event = event, .from = from_state, .to = @as(StateType, @enumFromInt(to_state - 1)) };
@@ -391,7 +400,7 @@ pub fn StateMachineFromTable(
                         var transition_name_buf: [4096]u8 = undefined;
                         var transition_name = std.io.fixedBufferStream(&transition_name_buf);
                         for (0..event_type_count) |event_index| {
-                            const slot_val = self.internal.events.get(events_start_offset + event_index);
+                            const slot_val = std.mem.readPackedIntNative(CellType, &self.internal.events, (events_start_offset + event_index) * bits_per_cell);
                             if (slot_val > 0 and (slot_val - 1) == @intFromEnum(to)) {
                                 if ((try transition_name.getPos()) == 0) {
                                     try writer.print(" [label = \"", .{});
@@ -500,11 +509,11 @@ pub fn StateMachineFromTable(
             fsm.setTransitionHandlers(&handlers);
 
             var line_no: usize = 1;
-            var lines = std.mem.split(u8, input, "\n");
+            var lines = std.mem.splitAny(u8, input, "\n");
 
             while (lines.next()) |line| {
                 if (std.mem.indexOf(u8, line, "->") == null and std.mem.indexOf(u8, line, "start:") == null and std.mem.indexOf(u8, line, "end:") == null) continue;
-                var parts = std.mem.tokenize(u8, line, " \t='\";,");
+                var parts = std.mem.tokenizeAny(u8, line, " \t='\";,");
                 while (parts.next()) |part| {
                     if (anyStringsEqual(&.{ "->", "[label", "]", "||" }, part)) {
                         continue;
@@ -551,11 +560,11 @@ pub fn FsmFromText(comptime input: []const u8) type {
         var event_enum_fields: []const EnumField = &[_]EnumField{};
 
         var line_no: usize = 1;
-        var lines = std.mem.split(u8, input, "\n");
+        var lines = std.mem.splitAny(u8, input, "\n");
         var start_state_index: usize = 0;
         while (lines.next()) |line| {
             if (std.mem.indexOf(u8, line, "->") == null and std.mem.indexOf(u8, line, "start:") == null and std.mem.indexOf(u8, line, "end:") == null) continue;
-            var parts = std.mem.tokenize(u8, line, " \t='\";,");
+            var parts = std.mem.tokenizeAny(u8, line, " \t='\";,");
             part_loop: while (parts.next()) |part| {
                 if (anyStringsEqual(&.{ "->", "[label", "]", "||" }, part)) {
                     continue;
@@ -602,14 +611,14 @@ pub fn FsmFromText(comptime input: []const u8) type {
         }
         _ = fsm.do(.newline) catch unreachable;
 
-        const StateEnum = @Type(.{ .Enum = .{
+        const StateEnum = @Type(.{ .@"enum" = .{
             .fields = state_enum_fields,
             .tag_type = std.math.IntFittingRange(0, state_enum_fields.len),
             .decls = &[_]std.builtin.Type.Declaration{},
             .is_exhaustive = false,
         } });
 
-        const EventEnum = if (event_enum_fields.len > 0) @Type(.{ .Enum = .{
+        const EventEnum = if (event_enum_fields.len > 0) @Type(.{ .@"enum" = .{
             .fields = event_enum_fields,
             .tag_type = std.math.IntFittingRange(0, event_enum_fields.len),
             .decls = &[_]std.builtin.Type.Declaration{},
