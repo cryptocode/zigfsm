@@ -1,5 +1,5 @@
 .{
-    .name = "zigfsm",
+    .name = .zigfsm,
     .version = "0.2.0",
     .paths = .{
         "build.zig",
@@ -10,4 +10,5 @@
         "LICENSE",
         "README.md",
     },
+    .fingerprint = 0x52e3d5c0b9b855f5,
 }

@@ -790,7 +790,7 @@ const GameState = struct {
 
     // Pops from the state stack and transitions to it. Returns true if stack had at least one state.
     pub fn undo(self: *GameState) !bool {
-        if (self.stack.popOrNull()) |state| {
+        if (self.stack.pop()) |state| {
             try self.fsm.transitionTo(state);
             return true;
         } else return false;
