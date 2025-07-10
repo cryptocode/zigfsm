@@ -663,6 +663,7 @@ pub const Interface = struct {
 /// An enum generator useful for testing, as well as state machines with sequenced states or events.
 /// If `prefix` is an empty string, use @"0", @"1", etc to refer to the enum field.
 pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_count: usize) type {
+    @setEvalBranchQuota(100_000);
     var fields: []const EnumField = &[_]EnumField{};
 
     for (0..element_count) |i| {

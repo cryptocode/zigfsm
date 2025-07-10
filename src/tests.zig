@@ -248,7 +248,7 @@ test "csv parser" {
                 const input = reader.readByte() catch {
                     // An example of how to handle parsing errors
                     _ = self.fsm.do(.eof) catch {
-                        try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
+                        std.debug.print("Unexpected end of stream\n", .{});
                     };
                     return;
                 };
@@ -376,7 +376,7 @@ test "csv parser, without handler callback" {
                 const input = reader.readByte() catch {
                     // An example of how to handle parsing errors
                     _ = self.fsm.do(.eof) catch {
-                        try std.io.getStdErr().writer().print("Unexpected end of stream\n", .{});
+                        std.debug.print("Unexpected end of stream\n", .{});
                     };
                     return;
                 };

@@ -42,5 +42,5 @@ pub fn main() !void {
     const elapsed_microsec = @as(f64, @floatFromInt(end - start)) / 1000;
     const rate = @as(f64, changes_per_iteration) * @as(f64, @floatFromInt(iterations)) / elapsed_microsec;
 
-    try std.io.getStdOut().writer().print("{d:.2} transitions per µs ({d:.2} nanoseconds on avg. per transition)\n", .{ rate, 1000 / rate });
+    std.debug.print("{d:.2} transitions per µs ({d:.2} nanoseconds on avg. per transition)\n", .{ rate, 1000 / rate });
 }
