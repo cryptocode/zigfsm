@@ -667,8 +667,8 @@ pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_cou
     var fields: []const EnumField = &[_]EnumField{};
 
     for (0..element_count) |i| {
-        comptime var tmp_buf: [128]u8 = undefined;
-        const field_name = comptime try std.fmt.bufPrint(&tmp_buf, "{s}{d}", .{ prefix, i });
+        var tmp_buf: [128]u8 = undefined;
+        const field_name = try std.fmt.bufPrint(&tmp_buf, "{s}{d}", .{ prefix, i });
         fields = fields ++ &[_]EnumField{.{
             .name = field_name ++ "",
             .value = i,

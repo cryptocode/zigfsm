@@ -603,9 +603,11 @@ test "export: graphviz export of finite automaton sample" {
     // This demonstrates that multiple events on the same transition are concatenated with ||
     try fsm.addEvent(.extra, .@"8", .@"5");
 
-    var outbuf = std.ArrayList(u8).init(std.testing.allocator);
-    defer outbuf.deinit();
-    try fsm.exportGraphviz("parser_example", outbuf.writer(), .{});
+    var outbuf = std.ArrayList(u8).empty;
+    defer outbuf.deinit(std.testing.allocator);
+    const writer = outbuf.writer(std.testing.allocator);
+
+    try fsm.exportGraphviz("parser_example", writer, .{});
 
     const target =
         \\digraph parser_example {
@@ -763,7 +765,7 @@ const GameState = struct {
     pub fn init() !GameState {
         var state = GameState{
             .fsm = FSM.init(),
-            .stack = std.ArrayList(FSM.StateEnum).init(std.testing.allocator),
+            .stack = std.ArrayList(FSM.StateEnum).empty,
         };
 
         // Event-triggered transitions
@@ -779,12 +781,12 @@ const GameState = struct {
     }
 
     pub fn deinit(self: *GameState) void {
-        self.stack.deinit();
+        self.stack.deinit(std.testing.allocator);
     }
 
     // Trigger an undoable event
     pub fn do(self: *GameState, event: FSM.EventEnum) !zigfsm.Transition(FSM.StateEnum, FSM.EventEnum) {
-        try self.stack.append(self.fsm.currentState());
+        try self.stack.append(std.testing.allocator, self.fsm.currentState());
         return try self.fsm.do(event);
     }
 

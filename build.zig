@@ -17,16 +17,27 @@ pub fn build(b: *std.Build) void {
         .root_source_file = b.path("src/main.zig"),
     });
 
-    const lib = b.addStaticLibrary(.{
+    const lib = b.addLibrary(.{
         .name = "zigfsm",
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = mode,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = target,
+            .optimize = mode,
+        }),
     });
 
     b.installArtifact(lib);
 
-    const main_tests = b.addTest(.{ .name = "tests", .root_source_file = b.path("src/tests.zig") });
+    const main_tests = b.addTest(
+        .{
+            .name = "tests",
+            .root_module = b.createModule(.{
+                .root_source_file = b.path("src/tests.zig"),
+                .target = target,
+                .optimize = mode,
+            }),
+        },
+    );
     main_tests.root_module.addImport("zigfsm", fsm_mod);
 
     const run_main_tests = b.addRunArtifact(main_tests);
@@ -35,9 +46,11 @@ pub fn build(b: *std.Build) void {
 
     const benchmark = b.addExecutable(.{
         .name = "benchmark",
-        .root_source_file = b.path("src/benchmark.zig"),
-        .optimize = std.builtin.Mode.ReleaseFast,
-        .target = target,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/benchmark.zig"),
+            .optimize = std.builtin.OptimizeMode.ReleaseFast,
+            .target = target,
+        }),
     });
     benchmark.root_module.addImport("zigfsm", fsm_mod);
 
