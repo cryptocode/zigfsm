@@ -644,7 +644,7 @@ pub const Interface = struct {
     /// if there's a mismatch. When this convention doesn't work, use @fieldParentPtr directly.
     pub fn downcast(comptime Implementer: type, interface_ref: anytype) *Implementer {
         const field_name = comptime std.meta.fieldNames(Implementer).*[0];
-        return @fieldParentPtr(field_name, interface_ref);
+        return @alignCast(@fieldParentPtr(field_name, interface_ref));
     }
 
     /// Instantiates an interface type and populates its function pointers to point to
