@@ -398,21 +398,21 @@ pub fn StateMachineFromTable(
                     if (options.show_events) {
                         const events_start_offset = @as(usize, @intCast(@intFromEnum(from))) * event_type_count;
                         var transition_name_buf: [4096]u8 = undefined;
-                        var transition_name = std.io.fixedBufferStream(&transition_name_buf);
+                        var transition_name = std.Io.Writer.fixed(&transition_name_buf);
                         for (0..event_type_count) |event_index| {
                             const slot_val = std.mem.readPackedIntNative(CellType, &self.internal.events, (events_start_offset + event_index) * bits_per_cell);
                             if (slot_val > 0 and (slot_val - 1) == @intFromEnum(to)) {
-                                if ((try transition_name.getPos()) == 0) {
+                                if (transition_name.buffered().len == 0) {
                                     try writer.print(" [label = \"", .{});
                                 }
-                                if ((try transition_name.getPos()) > 0) {
-                                    try transition_name.writer().print(" || ", .{});
+                                if (transition_name.buffered().len > 0) {
+                                    try transition_name.print(" || ", .{});
                                 }
-                                try transition_name.writer().print("{s}", .{@tagName(@as(T, @enumFromInt(event_index)))});
+                                try transition_name.print("{s}", .{@tagName(@as(T, @enumFromInt(event_index)))});
                             }
                         }
-                        if ((try transition_name.getPos()) > 0) {
-                            try writer.print("{s}\"]", .{transition_name.getWritten()});
+                        if (transition_name.buffered().len > 0) {
+                            try writer.print("{s}\"]", .{transition_name.buffered()});
                         }
                     }
                 }
@@ -611,19 +611,27 @@ pub fn FsmFromText(comptime input: []const u8) type {
         }
         _ = fsm.do(.newline) catch unreachable;
 
-        const StateEnum = @Type(.{ .@"enum" = .{
-            .fields = state_enum_fields,
-            .tag_type = std.math.IntFittingRange(0, state_enum_fields.len),
-            .decls = &[_]std.builtin.Type.Declaration{},
-            .is_exhaustive = false,
-        } });
+        const StateTag = std.math.IntFittingRange(0, state_enum_fields.len);
+        const StateEnum = blk: {
+            var field_names: [state_enum_fields.len][:0]const u8 = undefined;
+            var field_values: [state_enum_fields.len]StateTag = undefined;
+            for (state_enum_fields, &field_names, &field_values) |field, *name, *value| {
+                name.* = field.name;
+                value.* = @as(StateTag, @intCast(field.value));
+            }
+            break :blk @Enum(StateTag, .nonexhaustive, &field_names, &field_values);
+        };
 
-        const EventEnum = if (event_enum_fields.len > 0) @Type(.{ .@"enum" = .{
-            .fields = event_enum_fields,
-            .tag_type = std.math.IntFittingRange(0, event_enum_fields.len),
-            .decls = &[_]std.builtin.Type.Declaration{},
-            .is_exhaustive = false,
-        } }) else null;
+        const EventEnum = if (event_enum_fields.len > 0) blk: {
+            const EventTag = std.math.IntFittingRange(0, event_enum_fields.len);
+            var field_names: [event_enum_fields.len][:0]const u8 = undefined;
+            var field_values: [event_enum_fields.len]EventTag = undefined;
+            for (event_enum_fields, &field_names, &field_values) |field, *name, *value| {
+                name.* = field.name;
+                value.* = @as(EventTag, @intCast(field.value));
+            }
+            break :blk @Enum(EventTag, .nonexhaustive, &field_names, &field_values);
+        } else null;
 
         return StateMachine(StateEnum, EventEnum, @as(StateEnum, @enumFromInt(start_state_index)));
     }
@@ -674,10 +682,12 @@ pub fn GenerateConsecutiveEnum(comptime prefix: []const u8, comptime element_cou
             .value = i,
         }};
     }
-    return @Type(.{ .@"enum" = .{
-        .fields = fields,
-        .tag_type = std.math.IntFittingRange(0, element_count),
-        .decls = &[_]std.builtin.Type.Declaration{},
-        .is_exhaustive = false,
-    } });
+    const Tag = std.math.IntFittingRange(0, element_count);
+    var field_names: [fields.len][:0]const u8 = undefined;
+    var field_values: [fields.len]Tag = undefined;
+    for (fields, &field_names, &field_values) |field, *name, *value| {
+        name.* = field.name;
+        value.* = @as(Tag, @intCast(field.value));
+    }
+    return @Enum(Tag, .nonexhaustive, &field_names, &field_values);
 }

@@ -242,16 +242,8 @@ test "csv parser" {
 
         /// Feeds the input stream through the state machine
         fn read(self: *@This()) !void {
-            var stream = std.io.fixedBufferStream(self.csv);
-            const reader = stream.reader();
-            while (true) : (self.cur_index += 1) {
-                const input = reader.readByte() catch {
-                    // An example of how to handle parsing errors
-                    _ = self.fsm.do(.eof) catch {
-                        std.debug.print("Unexpected end of stream\n", .{});
-                    };
-                    return;
-                };
+            while (self.cur_index < self.csv.len) : (self.cur_index += 1) {
+                const input = self.csv[self.cur_index];
 
                 // The order of checks is important to classify input correctly
                 if (self.fsm.isCurrently(.quoted) and input != '"') {
@@ -268,6 +260,10 @@ test "csv parser" {
                     _ = try self.fsm.do(.char);
                 }
             }
+
+            _ = self.fsm.do(.eof) catch {
+                std.debug.print("Unexpected end of stream\n", .{});
+            };
         }
 
         /// We use state transitions to extract CSV field slices, and we're not using any extra memory.
@@ -370,16 +366,8 @@ test "csv parser, without handler callback" {
 
         /// Feeds the input stream through the state machine
         fn read(self: *@This()) !void {
-            var stream = std.io.fixedBufferStream(self.csv);
-            const reader = stream.reader();
-            while (true) : (self.cur_index += 1) {
-                const input = reader.readByte() catch {
-                    // An example of how to handle parsing errors
-                    _ = self.fsm.do(.eof) catch {
-                        std.debug.print("Unexpected end of stream\n", .{});
-                    };
-                    return;
-                };
+            while (self.cur_index < self.csv.len) : (self.cur_index += 1) {
+                const input = self.csv[self.cur_index];
 
                 // Holds from/to/event if a transition is triggered
                 var maybe_transition: ?zigfsm.Transition(State, InputEvent) = null;
@@ -425,6 +413,10 @@ test "csv parser, without handler callback" {
                     }
                 }
             }
+
+            _ = self.fsm.do(.eof) catch {
+                std.debug.print("Unexpected end of stream\n", .{});
+            };
         }
     };
 
@@ -603,11 +595,10 @@ test "export: graphviz export of finite automaton sample" {
     // This demonstrates that multiple events on the same transition are concatenated with ||
     try fsm.addEvent(.extra, .@"8", .@"5");
 
-    var outbuf = std.ArrayList(u8).empty;
-    defer outbuf.deinit(std.testing.allocator);
-    const writer = outbuf.writer(std.testing.allocator);
+    var outbuf: std.Io.Writer.Allocating = .init(std.testing.allocator);
+    defer outbuf.deinit();
 
-    try fsm.exportGraphviz("parser_example", writer, .{});
+    try fsm.exportGraphviz("parser_example", &outbuf.writer, .{});
 
     const target =
         \\digraph parser_example {
@@ -632,7 +623,7 @@ test "export: graphviz export of finite automaton sample" {
         \\
     ;
 
-    try expectEqualSlices(u8, target[0..], outbuf.items[0..]);
+    try expectEqualSlices(u8, target[0..], outbuf.written());
 }
 
 test "finite state automaton for accepting a 25p car park charge (from Computers Without Memory - Computerphile)" {

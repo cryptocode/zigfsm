@@ -3,6 +3,7 @@ const zigfsm = @import("zigfsm");
 
 // Run with `zig build benchmark`
 pub fn main() !void {
+    const io = std.Io.Threaded.global_single_threaded.io();
     const State = zigfsm.GenerateConsecutiveEnum("S", 20);
     const Event = zigfsm.GenerateConsecutiveEnum("T", 20);
     const defs = [_]zigfsm.Transition(State, Event){
@@ -15,8 +16,7 @@ pub fn main() !void {
     const FSM = zigfsm.StateMachineFromTable(State, Event, &defs, .S0, &.{});
     var fsm = FSM.init();
 
-    var timer = try std.time.Timer.start();
-    const start = timer.lap();
+    const start = std.Io.Timestamp.now(io, .awake);
 
     var iterations: usize = 0;
     const changes_per_iteration = 120;
@@ -37,9 +37,9 @@ pub fn main() !void {
     }
 
     std.mem.doNotOptimizeAway(&iterations);
-    const end = timer.read();
+    const end = std.Io.Timestamp.now(io, .awake);
 
-    const elapsed_microsec = @as(f64, @floatFromInt(end - start)) / 1000;
+    const elapsed_microsec = @as(f64, @floatFromInt(start.durationTo(end).toNanoseconds())) / 1000;
     const rate = @as(f64, changes_per_iteration) * @as(f64, @floatFromInt(iterations)) / elapsed_microsec;
 
     std.debug.print("{d:.2} transitions per µs ({d:.2} nanoseconds on avg. per transition)\n", .{ rate, 1000 / rate });
